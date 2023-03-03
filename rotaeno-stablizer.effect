@@ -1,0 +1,67 @@
+#define SamplerState sampler_state
+#define Texture2D texture2d
+#define PI 3.14159265
+
+uniform float4x4 ViewProj;
+uniform Texture2D image;
+
+uniform float2 offset_s;
+uniform float2 aspect_s;
+
+SamplerState sp_linear
+{
+    Filter    = Linear;
+    AddressU  = Border;
+    AddressV  = Border;
+    BorderColor = 00000000;
+};
+
+struct vertex_data
+{
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+vertex_data vertex_shader_main(vertex_data v_in)
+{
+    vertex_data v_out;
+    v_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+    v_out.uv  = v_in.uv;
+    return v_out;
+}
+
+float4 pixel_shader_main(vertex_data v_in) : TARGET
+{
+    float4 sFullCcw = image.Sample(sp_linear, offset_s);
+    float4 sFullCw = image.Sample(sp_linear, float2(1,1)-offset_s);
+    float4 sHorizon = image.Sample(sp_linear, float2(1-offset_s.x,offset_s.y));
+    float dFullCw = distance(sHorizon, sFullCw);
+    float dFullCcw = distance(sHorizon, sFullCcw);
+    float rotation = 0;
+
+    if (dFullCw != 0 && dFullCcw != 0) {
+        float4 sRotation = image.Sample(sp_linear, float2(offset_s.x,1-offset_s.y));
+
+        float dCw = distance(sRotation, sFullCw) / dFullCw;
+        float dCcw = distance(sRotation, sFullCcw) / dFullCcw;
+
+        rotation = (1-min(dCw, dCcw)/min(1, max(dCw, dCcw))) * PI * (dCw < dCcw ? -1 : 1);
+    }
+
+    float2x2 mRotation = {cos(rotation), -sin(rotation), sin(rotation), cos(rotation)};
+    float2 p_source = mul(mRotation, v_in.uv - 0.5) + 0.5;
+
+    p_source = p_source * aspect_s;
+    p_source = p_source + (1 - aspect_s) / 2;
+
+    return image.Sample(sp_linear, p_source);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = vertex_shader_main(v_in);
+        pixel_shader  = pixel_shader_main(v_in);
+    }
+}
