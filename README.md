@@ -1,4 +1,4 @@
-# Rotaeno capture stablier
+# Rotaeno capture stablizer
 OBS filter for stablizing Rotaeno game capture
 
 中文说明往下翻
