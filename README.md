@@ -1,7 +1,9 @@
-# Rotaeno capture Stablier
+# Rotaeno capture stablier
 OBS filter for stablizing Rotaeno game capture
 
 中文说明往下翻
+
+Demo 演示 >> [YouTube](https://youtu.be/g9pM9_iQlAE)
 
 ## Before you start
 This plugin depends on the four color squares in the corners when **Streaming Mode** is enabled in game.
