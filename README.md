@@ -3,15 +3,13 @@ OBS filter for stablizing Rotaeno game capture
 
 中文说明往下翻
 
-Demo 演示 >> [YouTube](https://youtu.be/g9pM9_iQlAE) (Xperia 5 II / AVerMedia GC553 XRGB 1080p60)
-
 ## Before you start
 This plugin depends on the four color squares in the corners when **Streaming Mode** is enabled in game.
 The rotation data from the game is "transmitted" by varying the color of these squares.
 
 The exact color value of the color squares matters! **DO NOT** use compressed format, for example MJPEG
 or H264, from capture devices, as compression introduces noise, and thus could severely impact the
-accuracy of stablization.
+accuracy of stablization. Demo >> [YouTube](https://youtu.be/g9pM9_iQlAE)
 
 Subsampled color formats, like NV12, YV12, or YUY2, are generally safe to use.
 
@@ -40,7 +38,7 @@ Add it to the filter stack of the capture device, and resize the output on the c
 本滤镜依赖Rotaeno在 **直播模式** 下在画面四角显示的方块。这四个方块的颜色表示当前的旋转角度。
 
 旋转稳定依赖于方块颜色的 **精确值** ，因此在OBS中 **切勿** 使用如MJPEG、H264等的压缩的视频格式。
-这种压缩会引入噪音，可能会严重干扰旋转角度的稳定性。
+这种压缩会引入噪音，可能会严重干扰旋转角度的稳定性。演示 >> [YouTube](https://youtu.be/g9pM9_iQlAE)
 
 色度抽样的视频格式（如NV12、YV12、YUY2等）一般不会产生噪音，可以使用。
 
