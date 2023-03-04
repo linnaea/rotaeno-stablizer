@@ -44,7 +44,7 @@ Add it to the filter stack of the capture device, and resize the output on the c
 
 色度抽样的视频格式（如NV12、YV12、YUY2等）一般不会产生噪音，可以使用。
 
-MJPEG（淘宝300块采集卡）和YUY2（圆刚GC553）采集格式的差异展示 >> [YouTube](https://youtu.be/FdldAuQML1s)
+MJPEG（淘宝300块采集卡）和YUY2（圆刚GC553）采集格式的差异展示 >> [YouTube](https://youtu.be/FdldAuQML1s) [B站](https://www.bilibili.com/video/BV1gX4y1Q7EE/)
 
 滤镜的采样点固定在视频边界内4~5像素处，如果方块不在这个位置上（比如用16:9的分辨率采集21:9的手机），
 请在本滤镜之上增加一个 **裁剪/填充** 滤镜，将多出来的黑边裁掉。
