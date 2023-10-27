@@ -1,14 +1,12 @@
-#define SamplerState sampler_state
-#define Texture2D texture2d
 #define PI 3.14159265
 
 uniform float4x4 ViewProj;
-uniform Texture2D image;
+uniform texture2d image;
 
 uniform float2 offset_s;
 uniform float2 aspect_s;
 
-SamplerState sp_linear
+sampler_state sp_linear
 {
     Filter    = Linear;
     AddressU  = Border;
@@ -48,9 +46,13 @@ float4 pixel_shader_main(vertex_data v_in) : TARGET
         rotation = (1-min(dCw, dCcw)/min(1, max(dCw, dCcw))) * PI * (dCw < dCcw ? -1 : 1);
     }
 
+#ifdef _OPENGL
+    mat2 mRotation = mat2(cos(rotation), -sin(rotation), sin(rotation), cos(rotation));
+#else
     float2x2 mRotation = {cos(rotation), -sin(rotation), sin(rotation), cos(rotation)};
-    float2 p_source = mul(mRotation, v_in.uv - 0.5) + 0.5;
+#endif
 
+    float2 p_source = mul(mRotation, v_in.uv - 0.5) + 0.5;
     p_source = p_source * aspect_s;
     p_source = p_source + (1 - aspect_s) / 2;
 
