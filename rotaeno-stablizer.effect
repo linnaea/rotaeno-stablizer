@@ -47,7 +47,7 @@ float4 pixel_shader_main(vertex_data v_in) : TARGET
     }
 
 #ifdef _OPENGL
-    mat2 mRotation = mat2(cos(rotation), -sin(rotation), sin(rotation), cos(rotation));
+    mat2 mRotation = mat2(cos(rotation), sin(rotation), -sin(rotation), cos(rotation));
 #else
     float2x2 mRotation = {cos(rotation), -sin(rotation), sin(rotation), cos(rotation)};
 #endif
