@@ -30,21 +30,12 @@ vertex_data vertex_shader_main(vertex_data v_in)
 
 float4 pixel_shader_main(vertex_data v_in) : TARGET
 {
-    float4 sFullCcw = image.Sample(sp_linear, offset_s);
-    float4 sFullCw = image.Sample(sp_linear, float2(1,1)-offset_s);
-    float4 sHorizon = image.Sample(sp_linear, float2(1-offset_s.x,offset_s.y));
-    float dFullCw = distance(sHorizon, sFullCw);
-    float dFullCcw = distance(sHorizon, sFullCcw);
-    float rotation = 0;
-
-    if (dFullCw != 0 && dFullCcw != 0) {
-        float4 sRotation = image.Sample(sp_linear, float2(offset_s.x,1-offset_s.y));
-
-        float dCw = distance(sRotation, sFullCw) / dFullCw;
-        float dCcw = distance(sRotation, sFullCcw) / dFullCcw;
-
-        rotation = (1-min(dCw, dCcw)/min(1, max(dCw, dCcw))) * PI * (dCw < dCcw ? -1 : 1);
-    }
+    float3 sTl = round(image.Sample(sp_linear, offset_s)).rgb;
+    float3 sBr = round(image.Sample(sp_linear, float2(1,1)-offset_s)).rgb;
+    float3 sTr = round(image.Sample(sp_linear, float2(1-offset_s.x,offset_s.y))).rgb;
+    float3 sBl = round(image.Sample(sp_linear, float2(offset_s.x,1-offset_s.y))).rgb;
+    float rtNum = dot(sTl, float3(2048,1024,512)) + dot(sTr, float3(256,128,64)) + dot(sBl, float3(32,16,8)) + dot(sBr, float3(4,2,1));
+    float rotation = rtNum / 4096 * 2 * PI;
 
 #ifdef _OPENGL
     mat2 mRotation = mat2(cos(rotation), sin(rotation), -sin(rotation), cos(rotation));

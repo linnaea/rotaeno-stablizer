@@ -7,13 +7,9 @@ OBS filter for stablizing Rotaeno game capture
 This plugin depends on the four color squares in the corners when **Streaming Mode** is enabled in game.
 The rotation data from the game is "transmitted" by varying the color of these squares.
 
-The exact color value of the color squares matters! **DO NOT** use compressed format, for example MJPEG
-or H264, from capture devices, as compression introduces noise, and thus could severely impact the
-accuracy of stablization.
-
-Subsampled color formats, like NV12, YV12, or YUY2, are generally safe to use.
-
-For comparison between MJPEG(US$40 AliExpress capture card) and YUY2(AVerMedia GC553) >> [YouTube](https://youtu.be/FdldAuQML1s)
+This version of plugin needs **Stream Encoding V2** to be enabled. If it's infeasible to use Encoding V2,
+for example, due to incompatibility with other tools still expecting Encoding V1,
+please use the [rv1](https://github.com/linnaea/obs-rotaeno-stablizer/tree/rv1) branch.
 
 The filter samples 4 to 5 pixels from the border of the capture image. If the squares are farther in,
 for example because you're using a 21:9 phone and capturing at a 16:9 resolution, you need to
@@ -39,12 +35,8 @@ Add it to the filter stack of the capture device, and resize the output on the c
 ## 注意事项
 本滤镜依赖Rotaeno在 **直播模式** 下在画面四角显示的方块。这四个方块的颜色表示当前的旋转角度。
 
-旋转稳定依赖于方块颜色的 **精确值** ，因此在OBS中 **切勿** 使用如MJPEG、H264等的压缩的视频格式。
-这种压缩会引入噪音，可能会严重干扰旋转角度的稳定性。
-
-色度抽样的视频格式（如NV12、YV12、YUY2等）一般不会产生噪音，可以使用。
-
-MJPEG（淘宝300块采集卡）和YUY2（圆刚GC553）采集格式的差异展示 >> [YouTube](https://youtu.be/FdldAuQML1s) [B站](https://www.bilibili.com/video/BV1gX4y1Q7EE/)
+当前版本需要勾选 **使用V2直播编码** 方可正常使用。若需要兼容旧工具请使用
+[rv1](https://github.com/linnaea/obs-rotaeno-stablizer/tree/rv1) 分支。
 
 滤镜的采样点固定在视频边界内4~5像素处，如果方块不在这个位置上（比如用16:9的分辨率采集21:9的手机），
 请在本滤镜之上增加一个 **裁剪/填充** 滤镜，将多出来的黑边裁掉。
