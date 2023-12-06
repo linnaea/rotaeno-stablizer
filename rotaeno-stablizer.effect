@@ -5,6 +5,7 @@ uniform texture2d image;
 
 uniform float2 offset_s;
 uniform float2 aspect_s;
+uniform bool debug;
 
 sampler_state sp_linear
 {
@@ -37,6 +38,30 @@ float4 pixel_shader_main(vertex_data v_in) : TARGET
     float rtNum = dot(sTl, float3(2048,1024,512)) + dot(sTr, float3(256,128,64)) + dot(sBl, float3(32,16,8)) + dot(sBr, float3(4,2,1));
     float rotation = rtNum / 4096 * 2 * PI;
 
+    if (debug && v_in.uv.y < 0.015 && 0.436 < v_in.uv.x && v_in.uv.x < 0.564) {
+        if (v_in.uv.y < 0.008 && v_in.uv.x < 0.56) {
+            if (v_in.uv.x > 0.55) return float4(-1,0,sBr.b, 1) + sBr.bbbb/2;
+            if (v_in.uv.x > 0.54) return float4(0,sBr.g,0, 1);
+            if (v_in.uv.x > 0.53) return float4(sBr.r,-1,0, 1) + sBr.rrrr/4;
+            if (v_in.uv.x > 0.52) return float4(-1,0,sBl.b, 1) + sBl.bbbb/2;
+            if (v_in.uv.x > 0.51) return float4(0,sBl.g,0, 1);
+            if (v_in.uv.x > 0.50) return float4(sBl.r,-1,0, 1) + sBr.rrrr/4;
+            if (v_in.uv.x > 0.49) return float4(-1,0,sTr.b, 1) + sTr.bbbb/2;
+            if (v_in.uv.x > 0.48) return float4(0,sTr.g,0, 1);
+            if (v_in.uv.x > 0.47) return float4(sTr.r,-1,0, 1) + sTr.rrrr/4;
+            if (v_in.uv.x > 0.46) return float4(-1,0,sTl.b, 1) + sTl.bbbb/2;
+            if (v_in.uv.x > 0.45) return float4(0,sTl.g,0, 1);
+            if (v_in.uv.x > 0.44) return float4(sTl.r,-1,0, 1) + sTl.rrrr/4;
+        }
+        if (v_in.uv.y > 0.01 && v_in.uv.x < 0.56) {
+            if (v_in.uv.x > 0.53) return float4(sBr, 1);
+            if (v_in.uv.x > 0.50) return float4(sBl, 1);
+            if (v_in.uv.x > 0.47) return float4(sTr, 1);
+            if (v_in.uv.x > 0.44) return float4(sTl, 1);
+        }
+        return float4(1,1,1,1);
+    }
+
 #ifdef _OPENGL
     mat2 mRotation = mat2(cos(rotation), sin(rotation), -sin(rotation), cos(rotation));
 #else
@@ -46,6 +71,9 @@ float4 pixel_shader_main(vertex_data v_in) : TARGET
     float2 p_source = mul(mRotation, v_in.uv - 0.5) + 0.5;
     p_source = p_source * aspect_s;
     p_source = p_source + (1 - aspect_s) / 2;
+    float2 dist_e = min(float2(1,1)-p_source, p_source) / 2;
+    if (dist_e.x <= offset_s.x && dist_e.y <= offset_s.y)
+        return float4(0,0,0,0);
 
     return image.Sample(sp_linear, p_source);
 }
