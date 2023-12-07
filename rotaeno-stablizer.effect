@@ -5,6 +5,7 @@ uniform texture2d image;
 
 uniform float2 offset_s;
 uniform float2 aspect_s;
+uniform float circle;
 uniform bool debug;
 
 sampler_state sp_linear
@@ -69,10 +70,13 @@ float4 pixel_shader_main(vertex_data v_in) : TARGET
 #endif
 
     float2 p_source = mul(mRotation, v_in.uv - 0.5) + 0.5;
+    if (distance(p_source, float2(0.5,0.5)) > circle)
+        return float4(0,0,0,0);
+
     p_source = p_source * aspect_s;
     p_source = p_source + (1 - aspect_s) / 2;
-    float2 dist_e = min(float2(1,1)-p_source, p_source) / 2;
-    if (!debug && dist_e.x <= offset_s.x && dist_e.y <= offset_s.y)
+    float2 dist_e = min(float2(1,1)-p_source, p_source) / (debug ? 1 : 2);
+    if (dist_e.x <= offset_s.x && dist_e.y <= offset_s.y)
         return float4(0,0,0,0);
 
     return image.Sample(sp_linear, p_source);
