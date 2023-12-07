@@ -6,6 +6,7 @@ uniform texture2d image;
 uniform float2 offset_s;
 uniform float2 aspect_s;
 uniform float circle;
+uniform int orient;
 uniform bool debug;
 
 sampler_state sp_linear
@@ -36,8 +37,14 @@ float4 pixel_shader_main(vertex_data v_in) : TARGET
     float3 sBr = round(image.Sample(sp_linear, float2(1,1)-offset_s)).rgb;
     float3 sTr = round(image.Sample(sp_linear, float2(1-offset_s.x,offset_s.y))).rgb;
     float3 sBl = round(image.Sample(sp_linear, float2(offset_s.x,1-offset_s.y))).rgb;
+    switch(orient) {
+        case -1: { float3 t = sTl; sTl = sBl; sBl = sBr; sBr = sTr; sTr = t; break; }
+        case  1: { float3 t = sTl; sTl = sTr; sTr = sBr; sBr = sBl; sBl = t; break; }
+        case  2: { float3 t = sTl; sTl = sBr; sBr = t; t = sTr; sTr = sBl; sBl = t; break; }
+    }
+
     float rtNum = dot(sTl, float3(2048,1024,512)) + dot(sTr, float3(256,128,64)) + dot(sBl, float3(32,16,8)) + dot(sBr, float3(4,2,1));
-    float rotation = rtNum / 4096 * 2 * PI;
+    float rotation = (rtNum / 2048 + orient / 2.0) * PI;
 
     if (debug && v_in.uv.y < 0.015 && 0.436 < v_in.uv.x && v_in.uv.x < 0.564) {
         if (v_in.uv.y < 0.008 && v_in.uv.x < 0.56) {
