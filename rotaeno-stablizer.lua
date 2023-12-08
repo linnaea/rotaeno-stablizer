@@ -1,22 +1,37 @@
 obs = obslua
 
+locale = {
+  script_name = "Rotaeno Stablization",
+  script_desc = "  This script provides a filter that stablizes Rotaeno game capture.\n  Requires Streaming Mode and Encoding V2 to be enabled in game.",
+  orientation = "Input Orientation",
+  orient90cw  = "90 CW (Rotates input 90 CCW)",
+  orient90ccw = "90 CCW (Rotates input 90 CW)",
+  orient_norm = "Normal",
+  orient180   = "180",
+  sample_x    = "Sample Offset X",
+  sample_y    = "Sample Offset Y",
+  circle_out  = "Circular output",
+  debug_out   = "Debug output"
+}
+
 function script_description()
-  return [[Rotaeno Stablization
-  This script provides a filter that stablizes Rotaeno game capture.
-  Requires Streaming Mode to be enabled in game.]]
+  load_locale(obs.obs_get_locale())
+  return locale.script_name .. "\n" .. locale.script_desc
 end
 
 function script_load(settings)
+  load_locale(obs.obs_get_locale())
   obs.obs_register_source(source_info)
 end
 
-source_info = {}
-source_info.id = 'filter-rotaeno-stablizer'
-source_info.type = obs.OBS_SOURCE_TYPE_FILTER
-source_info.output_flags = obs.OBS_SOURCE_VIDEO
+source_info = {
+  id = 'filter-rotaeno-stablizer',
+  type = obs.OBS_SOURCE_TYPE_FILTER,
+  output_flags = obs.OBS_SOURCE_VIDEO
+}
 
 source_info.get_name = function()
-  return "Rotaeno Stablizer"
+  return locale.script_name
 end
 
 source_info.create = function(settings, source)
@@ -94,17 +109,19 @@ source_info.get_defaults = function(settings)
 end
 
 source_info.get_properties = function(data)
-  local props = obs.obs_properties_create()
-  local orient = obs.obs_properties_add_list(props, "orient", "Orientation", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
-  obs.obs_property_list_add_int(orient, "90 CCW (Rotates input 90 CW)", -1)
-  obs.obs_property_list_add_int(orient, "Normal", 0)
-  obs.obs_property_list_add_int(orient, "90 CW (Rotates input 90 CCW)", 1)
-  obs.obs_property_list_add_int(orient, "180 (Input is inverted)", 2)
+  load_locale(obs.obs_get_locale())
 
-  obs.obs_properties_add_int(props, "sample_x", "Sample X", 0, 32, 1)
-  obs.obs_properties_add_int(props, "sample_y", "Sample Y", 0, 32, 1)
-  obs.obs_properties_add_float_slider(props, "circle", "Circular output", 0, 1, 0.001)
-  obs.obs_properties_add_bool(props, "debug", "Debug")
+  local props = obs.obs_properties_create()
+  local orient = obs.obs_properties_add_list(props, "orient", locale.orientation, obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
+  obs.obs_property_list_add_int(orient, locale.orient90ccw, -1)
+  obs.obs_property_list_add_int(orient, locale.orient_norm, 0)
+  obs.obs_property_list_add_int(orient, locale.orient90cw, 1)
+  obs.obs_property_list_add_int(orient, locale.orient180, 2)
+
+  obs.obs_properties_add_int(props, "sample_x", locale.sample_x, 0, 32, 1)
+  obs.obs_properties_add_int(props, "sample_y", locale.sample_y, 0, 32, 1)
+  obs.obs_properties_add_float_slider(props, "circle", locale.circle_out, 0, 1, 0.001)
+  obs.obs_properties_add_bool(props, "debug", locale.debug_out)
   return props
 end
 
@@ -114,4 +131,21 @@ source_info.update = function(data, settings)
   data.sample_x = obs.obs_data_get_int(settings, "sample_x") + 0.5
   data.sample_y = obs.obs_data_get_int(settings, "sample_y") + 0.5
   data.orient = obs.obs_data_get_int(settings, "orient")
+end
+
+function load_locale(locale_id)
+  local ok, lines = pcall(io.lines, script_path() .. locale_id .. '.ini')
+  if not ok then return end
+
+  for line in lines do
+    local equ = string.find(line, '=', 1, true)
+    if equ and equ > 1 then
+      local k = string.sub(line, 1, equ - 1):match("^%s*(.-)%s*$")
+      local v = string.sub(line, equ + 1):match("^%s*(.-)%s*$")
+      ok, v = pcall((loadstring or load)('return ' .. v))
+      if ok then locale[k] = v end
+    end
+  end
+
+  locale.locale_id = locale_id
 end
