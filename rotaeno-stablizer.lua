@@ -96,10 +96,10 @@ end
 source_info.get_properties = function(data)
   local props = obs.obs_properties_create()
   local orient = obs.obs_properties_add_list(props, "orient", "Orientation", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
-  obs.obs_property_list_add_int(orient, "90 CCW", -1)
+  obs.obs_property_list_add_int(orient, "90 CCW (Rotates input 90 CW)", -1)
   obs.obs_property_list_add_int(orient, "Normal", 0)
-  obs.obs_property_list_add_int(orient, "90 CW", 1)
-  obs.obs_property_list_add_int(orient, "180", 2)
+  obs.obs_property_list_add_int(orient, "90 CW (Rotates input 90 CCW)", 1)
+  obs.obs_property_list_add_int(orient, "180 (Input is inverted)", 2)
 
   obs.obs_properties_add_int(props, "sample_x", "Sample X", 0, 32, 1)
   obs.obs_properties_add_int(props, "sample_y", "Sample Y", 0, 32, 1)
