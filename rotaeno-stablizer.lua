@@ -56,9 +56,9 @@ float4 pixel_shader_main(vertex_data v_in) : TARGET
   float3 sBr = image.Sample(sp_linear, float2(1,1)-offset_s).rgb;
   float3 sTr = image.Sample(sp_linear, float2(1-offset_s.x,offset_s.y)).rgb;
   float3 sBl = image.Sample(sp_linear, float2(offset_s.x,1-offset_s.y)).rgb;
-  float3 half = float3(0.5,0.5,0.5);
+  float3 half3 = float3(0.5,0.5,0.5);
 
-  float3 acq3 = min(min(abs(sTl - half), abs(sBr - half)), min(abs(sTr - half), abs(sBl - half)));
+  float3 acq3 = min(min(abs(sTl - half3), abs(sBr - half3)), min(abs(sTr - half3), abs(sBl - half3)));
   float acq = min(min(acq3.x, acq3.y), acq3.z);
   if (acq < acquire) {
     if (debug && v_in.uv.y < 0.01)
@@ -107,7 +107,7 @@ float4 pixel_shader_main(vertex_data v_in) : TARGET
 #endif
 
   float2 p_source = mul(mRotation, v_in.uv - 0.5) + 0.5;
-  if (distance(p_source, half.xy) > circle)
+  if (distance(p_source, half3.xy) > circle)
     return float4(0,0,0,0);
 
   p_source = p_source * aspect_s;
