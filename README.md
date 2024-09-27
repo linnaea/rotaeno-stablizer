@@ -1,6 +1,8 @@
 # Rotaeno capture stablizer
 OBS filter for stablizing Rotaeno game capture
 
+[Click here for a tool that can be used in a modern browser / 点这里打开网页版工具](https://linnaea.github.io/rotaeno-stablizer/)
+
 中文说明往下翻
 
 ## Before you start
