@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="js/libav-5.4.6.1.1-webcodecs.js"></script>
+    <script src="js/libavjs-webcodecs-bridge.js"></script>
+    <script>
+        async function findCodecs(w, h, fps) {
+            w = Math.ceil(w/16)*16;
+            h = Math.ceil(h/16)*16;
+            const mbps = w*h*fps/256;
+
+            const p = {
+                avc1: {
+                    levels: [
+                        // [10, 99, 1485],
+                        // [11, 396, 3000],
+                        // [12, 396, 6000],
+                        // [13, 396, 11880],
+                        // [20, 396, 11880],
+                        // [21, 792, 19800],
+                        // [22, 1620, 20250],
+                        [30, 1620, 40500],
+                        [31, 3600, 108000],
+                        [32, 5120, 216000],
+                        [40, 8192, 245760],
+                        // [41, 8192, 245760],
+                        [42, 8704, 522240],
+                        [50, 22080, 589824],
+                        [51, 36864, 983040],
+                        [52, 36864, 2073600],
+                        [60, 139264, 4177920],
+                        [61, 139264, 8355840],
+                        [62, 139264, 16711680],
+                    ],
+                    profiles: [
+                        '6408', '4d00', '4200'
+                    ],
+                    format: (level, profile) => `avc1.${profile}${level.toString(16).padStart(2, '0')}`,
+                    describe: str => {
+                        let r = 'H.264/AVC L' + parseInt(str.slice(9,11), 16) / 10;
+
+                        switch(str.slice(0, 7)) {
+                            case 'avc1.4d': r += ' (Main)'; break;
+                            case 'avc1.64': r += ' (HiP)'; break;
+                            case 'avc1.42': r += ' (Base)'; break;
+                        }
+
+                        // switch(str.slice(9)) {
+                        //     case '14': case '29': r += ' (High Bitrate)';
+                        // }
+
+                        return r;
+                    }
+                },
+                hvc1: {
+                    levels: [
+                        // [30, 36864/256, 552960/256],
+                        // [60, 122880/256, 3686400/256],
+                        // [63, 245760/256, 7372800/256],
+                        [90, 552960/256, 16588800/256],
+                        [93, 983040/256, 33177600/256],
+                        [120, 2228224/256, 66846720/256],
+                        [123, 2228224/256, 133693440/256],
+                        [150, 8912896/256, 267386880/256],
+                        [153, 8912896/256, 534773760/256],
+                        [156, 8912896/256, 1069547520/256],
+                        [180, 35651584/256, 1069547520/256],
+                        [183, 35651584/256, 2139095040/256],
+                        [186, 35651584/256, 4278190080/256],
+                    ],
+                    tiers: [
+                        'L', // 'H'
+                    ],
+                    format: (level, tier) => `hvc1.1.6.${tier}${level}.B0`,
+                    describe: str => {
+                        let r = 'H.265/HEVC L' + parseInt(str.slice(10,13)) / 30;
+                        if(str[9] === 'H')
+                            r += ' (High Bitrate)';
+
+                        return r;
+                    }
+                },
+                vp09: {
+                    levels: [
+                        // [10, 36864/256, 829440/256],
+                        // [11, 73728/256, 2764800/256],
+                        // [20, 122880/256, 4608000/256],
+                        // [21, 245760/256, 9216000/256],
+                        [30, 552960/256, 20736000/256],
+                        [31, 983040/256, 36864000/256],
+                        [40, 2228224/256, 83558400/256],
+                        [41, 2228224/256, 160432128/256],
+                        [50, 8912896/256, 311951360/256],
+                        [51, 8912896/256, 588251136/256],
+                        [52, 8912896/256, 1176502272/256],
+                        [60, 35651584/256, 1176502272/256],
+                        [61, 35651584/256, 2353004544/256],
+                        [62, 35651584/256, 4706009088/256],
+                    ],
+                    profiles: [
+                        '01', '00', '12', '13'
+                    ],
+                    format: (level, profile) => `vp09.0${profile[0]}.${level}.08.0${profile[1]}.01.13.00.01`,
+                    describe: str => {
+                        let r = 'VP9 L' + parseInt(str.slice(8,10)) / 10;
+                        switch(str[15]) {
+                            case '1': break;
+                            case '0': r += ' (420J)'; break;
+                            case '2': r += ' (422)'; break;
+                            case '3': r += ' (444)'; break;
+                        }
+
+                        return r;
+                    }
+                },
+                vp8: {
+                    levels: [
+                        [0, 35651584/256, 4706009088/256],
+                    ],
+                    format: () => `vp8`,
+                    describe: () => 'VP8'
+                },
+                av01: {
+                    levels: [
+                        // [0, 147456/256, 4423680/256],
+                        // [1, 278784/256, 8363520/256],
+                        [4, 665856/256, 19975680/256],
+                        [5, 1065024/256, 31950720/256],
+                        [8, 2359296/256, 70778880/256],
+                        [9, 2359296/256, 141557760/256],
+                        [12, 8912896/256, 267386880/256],
+                        [13, 8912896/256, 534773760/256],
+                        [14, 8912896/256, 1069547520/256],
+                        // [15, 8912896/256, 1069547520/256],
+                        [16, 35651584/256, 1069547520/256],
+                        [17, 35651584/256, 2139095040/256],
+                        [18, 35651584/256, 4278190080/256],
+                        // [19, 35651584/256, 4278190080/256],
+                    ],
+                    profiles: [
+                        '0110','0111','0112','1000','2100'
+                    ],
+                    tiers: [
+                        'M', // 'H'
+                    ],
+                    format: (level, profile, tier) => `av01.${profile[0]}.${level}${tier}.08.0.${profile.slice(1)}.01.13.00.01`,
+                    describe: str => {
+                        let r = 'AV1 L';
+                        let level = parseInt(str.split('.')[2]);
+                        r += Math.floor(level / 4) + 2;
+                        r += '.';
+                        r += level & 3;
+
+                        switch(str.split('.')[5]) {
+                            case '110': break;
+                            case '111': r += ' (420M)'; break;
+                            case '112': r += ' (420J)'; break;
+                            case '000': r += ' (444)'; break;
+                            case '100': r += ' (422)'; break;
+                        }
+
+                        if(str.split('.')[2].endsWith('H'))
+                            r += ' (High Bitrate)';
+
+                        return r;
+                    }
+                }
+            };
+
+            const supportedConfigs = [];
+            for (const codec in p) {
+                let supMbFrame = null, supMbSpeed = null;
+                const supportedLevels = [];
+                for (const [level, mbFrame, mbSpeed] of p[codec].levels) {
+                    if (w*h/256 > mbFrame) continue;
+                    if (mbps > mbSpeed) continue;
+                    if (mbSpeed !== (supMbSpeed ??= mbSpeed)) break;
+                    if (mbFrame !== (supMbFrame ??= mbFrame)) break;
+                    supportedLevels.push(level);
+                }
+
+                let configs = [[]];
+                if (p[codec].tiers && p[codec].profiles) {
+                    configs.pop();
+                    for (const tier of p[codec].tiers) {
+                        for (const profile of p[codec].profiles) {
+                            configs.push([profile, tier]);
+                        }
+                    }
+                } else if (p[codec].tiers) {
+                    configs = p[codec].tiers.map(v => [v]);
+                } else if (p[codec].profiles) {
+                    configs = p[codec].profiles.map(v => [v]);
+                }
+
+                for (const level of supportedLevels) {
+                    for (const config of configs) {
+                        const codecStr = p[codec].format(level, ...config);
+                        if((await VideoEncoder.isConfigSupported({codec: codecStr, width: w, height: h})).supported) {
+                            supportedConfigs.push(codecStr);
+                        }
+                    }
+                }
+            }
+
+            return supportedConfigs.map(cfg => {
+                const codec = cfg.split('.')[0];
+                return {codec: cfg, desc: p[codec].describe(cfg)};
+            });
+        }
+    </script>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+<div><canvas id="preview"></canvas></div>
+<hr>
+<div><canvas id="rotGraph" height="130"></canvas></div>
+<hr>
+<div><canvas id="thrGraph" height="130"></canvas></div>
+<hr>
+
+<div id="status">&nbsp;</div>
+
+<div>
+    <input type="file" id="inputFile" accept=".ogv,.mkv,.webm,.mp4" />
+    <button id="previewBtn">自动裁切</button>
+</div>
+
+<div class="realtime-update">
+    <label for="trimStart">裁剪开头</label><input type="number" id="trimStart" min="0" max="6" step="0.05" value="0.2"/>
+    <label for="trimEnd">结尾</label><input type="number" id="trimEnd" min="0" max="6" step="0.05" value="0.8"/>
+    <label for="orientation">输入朝向</label>
+    <select id="orientation">
+        <option value="0,1,2,3,0" id="oUpright" selected>正向</option>
+    </select>
+</div>
+
+<div class="realtime-update">
+    <label for="cropL">裁切左</label><input type="number" id="cropL" min="0" max="99" step="1" value="0"/>
+    <label for="cropT">上</label><input type="number" id="cropT" min="0" max="99" step="1" value="0"/>
+    <label for="cropR">右</label><input type="number" id="cropR" min="0" max="99" step="1" value="0"/>
+    <label for="cropB">下</label><input type="number" id="cropB" min="0" max="99" step="1" value="0"/>
+</div>
+
+<div class="realtime-update">
+    <label for="threshold">色块阈值</label><input type="number" id="threshold" min="0" max="127" step="1" value="63"/>
+    <label for="blockSize">色块大小</label><input type="number" id="blockSize" min="1" max="32" step="1" value="8"/>
+</div>
+
+<div class="realtime-update">
+    <label for="circleRadius">圆环大小</label><input type="number" id="circleRadius" min="0" max="3000" step="1" value="63"/>
+    <label for="circleStroke">圆环粗细</label><input type="number" id="circleStroke" min="1" max="32" step="1" value="8"/>
+</div>
+
+<div class="realtime-update">
+    <label for="previews">预览数量</label><input type="number" id="previews" min="2" max="9" step="1" value="3"/>
+</div>
+
+<div>
+    <label for="outputDim">输出分辨率</label><input type="number" id="outputDim" min="160" max="5968" step="16" value="1600"/>
+    <label for="outputCodec">输出编码</label><select id="outputCodec"></select>
+    <label for="outputBitrate">码率</label><input type="number" id="outputBitrate" min="1" max="50" step="0.1" value="10"/>
+    <button id="encodeBtn">编码</button>
+    <a id="download">下载</a>
+</div>
+
+<script>
+    (async function() {
+        /** @type LibAV */
+        const libav = await LibAV.LibAV({noworker: true});
+
+        /** @typedef PtrAVPacket number */
+        /** @type PtrAVPacket */
+        const avpPkt = await libav.av_packet_alloc();
+        /** @type PtrAVPacket */
+        const avpPktW = await libav.av_packet_alloc();
+
+        /** @type HTMLCanvasElement */
+        const videoPreview = document.getElementById('preview');
+        /** @type HTMLCanvasElement */
+        const rotGraph = document.getElementById('rotGraph');
+        /** @type HTMLCanvasElement */
+        const thrGraph = document.getElementById('thrGraph');
+
+        /** @typedef PtrAVFormatContext number */
+        /** @type PtrAVFormatContext */
+        let inCtx;
+        /** @type Stream */
+        let ivStream, iaStream;
+        /** @type VideoDecoderConfig */
+        let ivConfig;
+        /** @type VideoDecoder */
+        let vDec;
+
+        /** @type Promise */
+        let frameReady;
+
+        /** @type ?File */
+        let currentFile;
+        libav.onblockread = async function (filename, pos, length) {
+            if (!currentFile || filename !== currentFile.name) {
+                await libav.ff_block_reader_dev_send(filename, pos, null);
+            } else {
+                await libav.ff_block_reader_dev_send(filename, pos,
+                    new Uint8Array(await currentFile.slice(pos, pos+length).arrayBuffer()));
+            }
+        };
+
+        let config;
+        const allParams = {
+            previews: parseInt,
+            threshold: parseInt,
+            blockSize: parseInt,
+            orientation: v => v.split(',').map(n => parseInt(n)),
+            cropL: parseInt,
+            cropT: parseInt,
+            cropR: parseInt,
+            cropB: parseInt,
+            outputDim: parseInt,
+            circleRadius: parseInt,
+            circleStroke: parseInt,
+            trimStart: v => parseFloat(v) * 1000000,
+            trimEnd: v => parseFloat(v) * 1000000,
+            outputBitrate: v => parseFloat(v) * 1000000,
+        }
+
+        /** @type {VideoFrame[]} */
+        const videoFrames = [];
+        /** @type number */
+        let prevRot = 0, scale = 1, videoDurationUs, peakFramerate, totalFrames;
+
+        /** @type OffscreenCanvas */
+        let renderCanvas;
+
+        /** @type OffscreenCanvasRenderingContext2D */
+        let renderCtx, blockCanvasCtx;
+
+        /** @type string */
+        let outputFile, outputUrl;
+        /** @type {(ArrayBuffer | Blob)[]} */
+        let outputChunks;
+        const outputChunkSize = 33554432;
+        libav.onwrite = async function (filename, pos, data) {
+            if (filename !== outputFile) return;
+            outputChunks ??= [];
+
+            const startChunk = Math.floor(pos / outputChunkSize);
+            while (startChunk >= outputChunks.length)
+                outputChunks.push(new ArrayBuffer(0, {maxByteLength: outputChunkSize}));
+
+            if (outputChunks[startChunk] instanceof Blob)
+                outputChunks[startChunk] = await outputChunks[startChunk].arrayBuffer();
+
+            const chunkPos = pos % outputChunkSize;
+            const chunkLen = outputChunkSize - chunkPos;
+            const writeLen = Math.min(chunkLen, data.length);
+            if (outputChunks[startChunk].byteLength < chunkPos + writeLen) {
+                if (!outputChunks[startChunk].resizable) {
+                    const newData = new ArrayBuffer(chunkPos + writeLen, {maxByteLength: outputChunkSize});
+                    new Uint8Array(newData).set(new Uint8Array(outputChunks[startChunk]));
+                    outputChunks[startChunk] = newData;
+                } else {
+                    outputChunks[startChunk].resize(chunkPos + writeLen);
+                }
+            }
+
+            new Uint8Array(outputChunks[startChunk], chunkPos).set(data.subarray(0, writeLen));
+            if (startChunk > 0 && startChunk < outputChunks.length - 1)
+                if (outputChunks[startChunk].length === outputChunkSize)
+                    outputChunks[startChunk] = new Blob([outputChunks[startChunk]]);
+
+            if (data.length > writeLen)
+                await libav.onwrite(filename, pos + writeLen, data.subarray(writeLen));
+        }
+
+        const delay = t => new Promise(r => setTimeout(() => r(), t));
+
+        const getParameters = function () {
+            const p = {};
+            for (const key in allParams) {
+                p[key] = allParams[key](document.getElementById(key).value);
+            }
+
+            if (p.blockSize !== blockCanvasCtx?.canvas.height)
+                blockCanvasCtx = null;
+
+            if (p.outputDim !== renderCanvas?.height)
+                renderCanvas = renderCtx = null;
+
+            scale = null;
+            return config = p;
+        }
+
+        const processFrame = function(frame, bg) {
+            const blockSize = config.blockSize;
+            const frameWidth = frame.displayWidth - config.cropL - config.cropR;
+            const frameHeight = frame.displayHeight - config.cropT - config.cropB;
+
+            blockCanvasCtx ??= new OffscreenCanvas(blockSize*4, blockSize).getContext('2d', {willReadFrequently: true});
+
+            blockCanvasCtx.drawImage(frame, config.cropL, config.cropT,
+                blockSize, blockSize, blockSize * config.orientation[0], 0, blockSize, blockSize);
+            blockCanvasCtx.drawImage(frame, config.cropL + frameWidth - blockSize, config.cropT,
+                blockSize, blockSize, blockSize * config.orientation[1], 0, blockSize, blockSize);
+            blockCanvasCtx.drawImage(frame, config.cropL, config.cropT + frameHeight - blockSize,
+                blockSize, blockSize, blockSize * config.orientation[2], 0, blockSize, blockSize);
+            blockCanvasCtx.drawImage(frame, config.cropL + frameWidth - blockSize, config.cropT + frameHeight - blockSize,
+                blockSize, blockSize, blockSize * config.orientation[3], 0, blockSize, blockSize);
+
+            const blocks = blockCanvasCtx.getImageData(0, 0, blockSize * 4, blockSize).data;
+
+            const rotPx = Array.from({length:4}, (_, block) => {
+                return Array.from({length: blockSize}, (_, row) => {
+                    return Array.from({length: blockSize}, (_, col) => {
+                        const px = row * blockSize * 4 + block * blockSize + col;
+                        return blocks.slice(px*4, px*4+3);
+                    }).reduce((a, b) => a.map((v, i) => v + b[i]), [0, 0, 0]);
+                }).reduce((a, b) => a.map((v, i) => v + b[i]), [0, 0, 0]);
+            }).flat(1).map(v => v / blockSize / blockSize);
+
+            const thr = Math.max(...rotPx.map(v => Math.min(v, 255-v)));
+            const rot = thr > config.threshold ? prevRot : rotPx.map(v => v < 127 ? 0 : 1).reduce((a, b) => a * 2 + b, 0);
+            prevRot = rot;
+
+            let graphCtx;
+
+            if (!scale) {
+                let outputDim = Math.floor(Math.sqrt(frameWidth * frameWidth + frameHeight * frameHeight));
+                let mbDim = Math.ceil(outputDim / 16) * 16;
+                document.getElementById('outputDim').max = Math.min(mbDim, 5968);
+                document.getElementById('outputDim').value = config.outputDim = Math.min(config.outputDim, mbDim, 5968);
+
+                scale = Math.min(config.outputDim / outputDim, 1);
+
+                outputDim = config.outputDim;
+                if (renderCanvas?.height !== outputDim) {
+                    renderCanvas = new OffscreenCanvas(outputDim, outputDim);
+                    renderCtx = renderCanvas.getContext('2d');
+                }
+
+                if (rotGraph.width !== outputDim / 2) {
+                    thrGraph.width = rotGraph.width = videoPreview.width = videoPreview.height = outputDim / 2;
+                    resetGraph();
+                }
+            }
+
+            const outputDim = config.outputDim;
+            const tsX = outputDim / 2 / videoDurationUs;
+            graphCtx = thrGraph.getContext('2d');
+            graphCtx.fillStyle = 'white';
+            graphCtx.fillRect(frame.timestamp * tsX, 127-thr, Math.max(1,frame.duration*tsX), 1);
+            graphCtx = rotGraph.getContext('2d');
+            graphCtx.drawImage(blockCanvasCtx.canvas, frame.timestamp * tsX, 0);
+            graphCtx.fillStyle = 'white';
+            graphCtx.fillRect(frame.timestamp * tsX, ((rot+2048)%4096)/4096*128, Math.max(1,frame.duration*tsX), 1);
+
+            renderCtx.clearRect(0, 0, outputDim, outputDim);
+            if (bg) renderCtx.fillRect(0, 0, outputDim, outputDim);
+            renderCtx.translate(outputDim / 2, outputDim / 2);
+            renderCtx.scale(scale, scale);
+            renderCtx.rotate(-Math.PI * 2 * (rot + config.orientation[4]) / 4096);
+
+            if (config.circleStroke && config.circleRadius) {
+                renderCtx.strokeStyle = 'white';
+                renderCtx.lineWidth = config.circleStroke;
+                renderCtx.beginPath();
+                renderCtx.ellipse(0,0,config.circleRadius,config.circleRadius,0,0,Math.PI*2);
+                renderCtx.stroke();
+            }
+
+            renderCtx.drawImage(frame, config.cropL, config.cropT, frameWidth, frameHeight,
+                -frameWidth / 2, -frameHeight / 2, frameWidth, frameHeight);
+            renderCtx.clearRect(-frameWidth / 2, -frameHeight / 2, blockSize, blockSize);
+            renderCtx.clearRect(frameWidth / 2-blockSize, -frameHeight / 2, blockSize, blockSize);
+            renderCtx.clearRect(-frameWidth / 2, frameHeight / 2-blockSize, blockSize, blockSize);
+            renderCtx.clearRect(frameWidth / 2-blockSize, frameHeight / 2-blockSize, blockSize, blockSize);
+            renderCtx.resetTransform();
+            frame.close();
+        }
+
+        const resetGraph = function () {
+            let graphCtx = thrGraph.getContext('2d');
+            graphCtx.clearRect(0,0,config.outputDim/2,127);
+            graphCtx.fillStyle = 'red';
+            graphCtx.fillRect(0, 127 - config.threshold, config.outputDim/2, 1);
+            rotGraph.getContext('2d').clearRect(0,0,config.outputDim/2,127);
+        };
+
+        const updatePreview = async function () {
+            config = getParameters();
+            resetGraph();
+
+            document.getElementById('status').innerText = 'Rendering';
+            const previewTimestamps = Array.from({length: config.previews * config.previews},
+                (_, n) => (videoDurationUs - config.trimStart - config.trimEnd) / (config.previews * config.previews - 1) * n + config.trimStart);
+
+            let previewCtx, outputDim;
+            let previewIndex = 0;
+            for (const ts of previewTimestamps) {
+                const [tslo, tshi] = libav.f64toi64(ts);
+                await libav.avformat_seek_file_max(inCtx, -1, tslo, tshi, 0);
+                while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
+                    const avPkt = await libav.ff_copyout_packet(avpPkt);
+                    if (avPkt.stream_index !== ivStream.index) continue;
+                    vDec.decode(LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream));
+                    await delay(10);
+                    await libav.av_packet_unref(avpPkt);
+
+                    if (videoFrames.length) {
+                        prevRot = 0;
+                        const frame = videoFrames.shift();
+                        if (frame.timestamp < ts) {
+                            frame.close();
+                            continue;
+                        }
+
+                        processFrame(frame);
+                        if(!previewCtx) {
+                            outputDim = config.outputDim;
+                            previewCtx = videoPreview.getContext('2d');
+                            previewCtx.clearRect(0, 0, outputDim, outputDim);
+                            previewCtx.fillStyle = '#665577';
+                            previewCtx.fillRect(0, 0, outputDim, outputDim);
+                        }
+
+                        previewCtx.drawImage(renderCanvas, 0, 0, outputDim, outputDim,
+                            (previewIndex % config.previews) * outputDim / 2 / config.previews,
+                            Math.floor(previewIndex / config.previews) * outputDim / 2 / config.previews,
+                            outputDim / 2 / config.previews, outputDim / 2 / config.previews
+                        );
+
+                        previewIndex++;
+                        await vDec.flush();
+                        await delay(10);
+                        while (videoFrames.length)
+                            videoFrames.pop().close();
+
+                        break;
+                    }
+                }
+            }
+
+            document.getElementById('status').innerText = 'OK';
+        };
+
+        const updateCodecs = async function () {
+            const codecs = await findCodecs(config.outputDim, config.outputDim, peakFramerate ? peakFramerate : 120);
+            const selectElement = document.getElementById('outputCodec');
+            for (const child of [...selectElement.childNodes])
+                child.remove();
+
+            for (const codec of codecs) {
+                const option = document.createElement('option');
+                option.value = codec.codec;
+                option.text = codec.desc;
+                option.selected = selectElement.childElementCount === 0;
+                selectElement.append(option);
+            }
+        };
+
+        const estimateCrop = async function (cw, ch) {
+            let voteL = Array.from({length: Math.floor(cw / 100)+2}, () => 0);
+            let voteR = Array.from({length: Math.floor(cw / 100)+2}, () => 0);
+            let voteT = Array.from({length: Math.floor(ch / 100)+2}, () => 0);
+            let voteB = Array.from({length: Math.floor(ch / 100)+2}, () => 0);
+            let frames = 0;
+            const frameBuffer = new OffscreenCanvas(cw, ch);
+            const fbContext = frameBuffer.getContext('2d', {willReadFrequently: true});
+
+            const voteCrop = function(votes, coordinate) {
+                let crop = votes.length-1;
+                while (crop > 0) {
+                    const fbData = fbContext.getImageData(...coordinate(crop)).data;
+                    let canCrop = true;
+                    for (const b of fbData) {
+                        if (b > 31 && b < 224) {
+                            canCrop = false;
+                            break;
+                        }
+                    }
+
+                    if (canCrop) break;
+                    crop--;
+                }
+                votes[crop]++;
+            };
+
+            await libav.avformat_seek_file_max(inCtx, -1, 0, 0, 0);
+            while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
+                const avPkt = await libav.ff_copyout_packet(avpPkt);
+                if (avPkt.stream_index !== ivStream.index) continue;
+                vDec.decode(LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream));
+                await libav.av_packet_unref(avpPkt);
+
+                while (videoFrames.length) {
+                    const frame = videoFrames.shift();
+                    document.getElementById('status').innerText = `Analyzing ${(frame.timestamp/1000000).toFixed(2)}/${(videoDurationUs/1000000).toFixed(2)}`;
+
+                    frames++;
+                    fbContext.drawImage(frame, 0, 0);
+
+                    voteCrop(voteL, crop => [crop - 1, 0, 1, frame.displayWidth]);
+                    voteCrop(voteR, crop => [frame.displayWidth - crop, 0, 1, frame.displayHeight]);
+                    voteCrop(voteT, crop => [0, crop - 1, frame.displayWidth, 1]);
+                    voteCrop(voteB, crop => [0, frame.displayHeight - crop, frame.displayWidth, 1]);
+                    frame.close();
+
+                    switch (frames) {
+                        case 33: {
+                            await vDec.flush();
+                            const [tslo, tshi] = libav.f64toi64(videoDurationUs * 0.45);
+                            await libav.avformat_seek_file_max(inCtx, -1, tslo, tshi, 0);
+                            break;
+                        }
+                        case 66: {
+                            await vDec.flush();
+                            const [tslo, tshi] = libav.f64toi64(videoDurationUs * 0.9);
+                            await libav.avformat_seek_file_max(inCtx, -1, tslo, tshi, 0);
+                            break;
+                        }
+                        case 99: {
+                            await vDec.flush();
+                            break;
+                        }
+                    }
+                }
+
+                if (frames >= 99)
+                    break;
+            }
+
+            const vote = function(votes) {
+                votes = [...votes];
+                votes.pop();
+                const thr = votes.reduce((a,b)=>a+b) * 4 / 5;
+                return votes.reduce((a, b, i) => a[0] >= thr ? a : [a[0] + b, i], [0,0])[1];
+            };
+
+            document.getElementById('cropL').value = vote(voteL);
+            document.getElementById('cropR').value = vote(voteR);
+            document.getElementById('cropT').value = vote(voteT);
+            document.getElementById('cropB').value = vote(voteB);
+        };
+
+        const estimateBlockSize = async function(lim) {
+            let blockSize = 6, r = 0, g = 0, b = 0;
+            config = getParameters();
+            const frameBuffer = new OffscreenCanvas(lim+5, lim+5);
+            const fbCtx = frameBuffer.getContext('2d', {willReadFrequently: true});
+
+            const [tslo, tshi] = libav.f64toi64(videoDurationUs / 8);
+            await libav.avformat_seek_file_max(inCtx, -1, tslo, tshi, 0);
+            while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
+                const avPkt = await libav.ff_copyout_packet(avpPkt);
+                if (avPkt.stream_index !== ivStream.index) continue;
+                vDec.decode(LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream));
+                await libav.av_packet_unref(avpPkt);
+
+                while (videoFrames.length) {
+                    const frame = videoFrames.shift();
+                    document.getElementById('status').innerText = `Analyzing ${(frame.timestamp/1000000).toFixed(2)}/${(videoDurationUs/1000000).toFixed(2)}`;
+
+                    fbCtx.drawImage(frame, config.cropL, config.cropT, frameBuffer.width, frameBuffer.height, 0, 0, frameBuffer.width, frameBuffer.height);
+                    const data = fbCtx.getImageData(2, 2, 4, 4);
+                    r = Array.from({length: data.height * data.width}, (_, i) => data.data[i * 4]).reduce((a, b) => a + b) / data.height / data.width;
+                    g = Array.from({length: data.height * data.width}, (_, i) => data.data[i * 4 + 1]).reduce((a, b) => a + b) / data.height / data.width;
+                    b = Array.from({length: data.height * data.width}, (_, i) => data.data[i * 4 + 2]).reduce((a, b) => a + b) / data.height / data.width;
+
+                    if (r > 127 && g > 127) {
+                        await vDec.flush();
+                        await delay(200);
+                        if (videoFrames.length) {
+                            frame.close();
+                        } else {
+                            videoFrames.unshift(frame);
+                        }
+                        break;
+                    }
+
+                    frame.close();
+                }
+
+                if (r > 127 && g > 127) break;
+            }
+
+            if (r < 128 && g < 128 && b < 128) return;
+            for(; blockSize <= lim; blockSize++) {
+                const data = fbCtx.getImageData(1, 1, blockSize - 1, blockSize - 1);
+                r = Array.from({length: data.height * data.width}, (_, i) => data.data[i*4]).reduce((a,b) => a+b) / data.height / data.width;
+                g = Array.from({length: data.height * data.width}, (_, i) => data.data[i*4+1]).reduce((a,b) => a+b) / data.height / data.width;
+                b = Array.from({length: data.height * data.width}, (_, i) => data.data[i*4+2]).reduce((a,b) => a+b) / data.height / data.width;
+                const nextDat = [...fbCtx.getImageData(blockSize, 0, 1, blockSize).data, ...fbCtx.getImageData(0, blockSize, blockSize, 1).data];
+                const nr = Array.from({length: blockSize*2}, (_, i) => nextDat[i*4]).reduce((a,b) => a+b) / blockSize / 2;
+                const ng = Array.from({length: blockSize*2}, (_, i) => nextDat[i*4+1]).reduce((a,b) => a+b) / blockSize / 2;
+                const nb = Array.from({length: blockSize*2}, (_, i) => nextDat[i*4+2]).reduce((a,b) => a+b) / blockSize / 2;
+
+                if (Math.abs(nr-r) > 31 || Math.abs(ng-g) > 31 || Math.abs(nb-b) > 31) break;
+            }
+
+            document.getElementById('blockSize').value = blockSize;
+        }
+
+        document.getElementById('inputFile').onchange = async function () {
+            if (inCtx) {
+                await libav.avformat_close_input_js(inCtx);
+                inCtx = null;
+            }
+
+            if (vDec) {
+                vDec.close();
+                vDec = null;
+            }
+
+            if (currentFile)
+                await libav.unlink(currentFile.name);
+
+            document.getElementById('status').innerText = 'Loading';
+            currentFile = document.getElementById('inputFile').files[0];
+            await libav.mkblockreaderdev(currentFile.name, currentFile.size);
+            let inStreams;
+            [inCtx, inStreams] = await libav.ff_init_demuxer_file(currentFile.name);
+            ivStream = inStreams.filter(x => x.codec_type === LibAV.AVMEDIA_TYPE_VIDEO)[0];
+            iaStream = inStreams.filter(x => x.codec_type === LibAV.AVMEDIA_TYPE_AUDIO)[0];
+            totalFrames = Number(new BigUint64Array((await libav.copyout_u8(ivStream.ptr+48, 8)).buffer)[0]);
+            videoDurationUs = ivStream.duration_time_base * ivStream.time_base_num * 1000000 / ivStream.time_base_den;
+
+            document.getElementById('trimStart').max = document.getElementById('trimEnd').max =
+                Math.min(Math.floor(videoDurationUs / 2000), 60000) / 1000;
+
+            ivConfig = await LibAVWebCodecsBridge.videoStreamToConfig(libav, ivStream);
+            vDec = new VideoDecoder({
+                error: e => console.log(e),
+                output: async f => {
+                    if (f.duration)
+                        peakFramerate = Math.max(peakFramerate, 1000000 / f.duration);
+
+                    if (videoFrames.length > 3) {
+                        const frame = await createImageBitmap(f);
+                        frame['displayHeight'] = f.displayHeight;
+                        frame['displayWidth'] = f.displayWidth;
+                        frame['duration'] = f.duration;
+                        frame['timestamp'] = f.timestamp;
+                        videoFrames.push(frame);
+                        f.close();
+                    } else {
+                        videoFrames.push(f);
+                    }
+                },
+            });
+            vDec.configure(await LibAVWebCodecsBridge.videoStreamToConfig(libav, ivStream));
+
+            await updatePreview();
+            await updateCodecs();
+        };
+
+        document.getElementById('previewBtn').onclick = async function () {
+            peakFramerate = 0;
+            config = getParameters();
+
+            document.getElementById('status').innerText = 'Analyzing';
+            await estimateCrop(ivConfig.codedWidth, ivConfig.codedHeight);
+            await estimateBlockSize(Math.floor(Math.max(ivConfig.codedWidth, ivConfig.codedHeight) / 100));
+
+            const frame = videoFrames.shift();
+            let frameWidth = frame.displayWidth - config.cropL - config.cropR;
+            let frameHeight = frame.displayHeight - config.cropT - config.cropB;
+            if (frameHeight > frameWidth) [frameHeight, frameWidth] = [frameWidth, frameHeight];
+            const circleHeight = (frameWidth / frameHeight > 2.3333333333) ? frameWidth / 2.3333333333 : frameHeight;
+            document.getElementById('circleRadius').max = frameWidth;
+            document.getElementById('circleRadius').value = Math.floor(circleHeight * 1.5574 / 2);
+            document.getElementById('circleStroke').value = Math.floor(3 / 328 * circleHeight - 46 / 41);
+
+            frame.close();
+            while (videoFrames.length)
+                videoFrames.pop().close();
+
+            await updatePreview();
+            await updateCodecs();
+        };
+
+        document.getElementById('encodeBtn').onclick = async function () {
+            config = getParameters()
+            /** @type {[EncodedVideoChunk, EncodedVideoChunkMetadata][]} */
+            const encodedChunks = [];
+            const outputConfig = {
+                codec: document.getElementById('outputCodec').value,
+                bitrateMode: 'variable', contentHint: 'motion', framerate: totalFrames * 1000000 / videoDurationUs,
+                bitrate: config.outputBitrate, width: config.outputDim, height: config.outputDim
+            };
+
+            document.getElementById('status').innerText = 'Loading';
+            if (!(await VideoEncoder.isConfigSupported(outputConfig)).supported) {
+                return;
+            }
+
+            let messages = 0, realTrimUs = -1, ia4Cc;
+            if (iaStream) {
+                await libav.avformat_seek_file_max(inCtx, -1, 0, 0, 0);
+                while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
+                    const avPkt = await libav.ff_copyout_packet(avpPkt);
+                    if (avPkt.stream_index === iaStream.index) {
+                        const framePtsUs = avPkt.pts * iaStream.time_base_num * 1000000 / iaStream.time_base_den;
+                        const frameEndUs = (avPkt.pts + avPkt.duration) * iaStream.time_base_num * 1000000 / iaStream.time_base_den;
+                        realTrimUs = framePtsUs;
+                        if (frameEndUs > config.trimStart) {
+                            break;
+                        }
+                    }
+                }
+
+                switch (iaStream.codec_id) {
+                    case 0x15002: ia4Cc = 'mp4a'; break;
+                    case 0x15003: ia4Cc = 'ac-3'; break;
+                    case 0x1500c: ia4Cc = 'fLaC'; break;
+                    case 0x1503c: ia4Cc = 'Opus'; break;
+                }
+            }
+
+            const vEnc = new VideoEncoder({
+                error: e => console.log(e),
+                output: (chunk, metadata) => encodedChunks.push([chunk, metadata])
+            });
+            vEnc.configure(outputConfig);
+
+            if (outputUrl) URL.revokeObjectURL(outputUrl);
+            if (outputFile) await libav.unlink(outputFile);
+            outputUrl = null;
+            outputChunks = [];
+            outputFile = new Date().getTime().toString() + '.';
+            switch (outputConfig.codec.split('.')[0]) {
+                case 'av01':
+                case 'vp09':
+                case 'vp8':
+                    // 0x15005 - AV_CODEC_ID_VORBIS
+                    // 0x1503c - AV_CODEC_ID_OPUS
+                    if (!iaStream || iaStream.codec_id === 0x1503c || iaStream.codec_id === 0x15005)
+                        outputFile += 'webm';
+
+                    break;
+                case 'avc1':
+                case 'hvc1':
+                    if (!iaStream || ia4Cc)
+                        outputFile += 'mp4';
+
+                    break;
+            }
+
+            if (outputFile.endsWith('.'))
+                outputFile += 'mkv';
+
+            /** @type number */ let outCtx;
+            /** @type {number|Packet[]} */ let outAvIo = [];
+            /** @type {[number, number, number][]} */ let oStreams;
+            await libav.mkwriterdev(outputFile);
+
+            oStreams = [await LibAVWebCodecsBridge.configToVideoStream(libav, outputConfig)];
+            oStreams[0][1] = ivStream.time_base_num; oStreams[0][2] = ivStream.time_base_den;
+            if (iaStream)
+                oStreams.push([iaStream.codecpar, iaStream.time_base_num, iaStream.time_base_den]);
+            await libav.AVCodecParameters_color_range_s(oStreams[0][0], 2); // AVCOL_RANGE_JPEG
+
+            const startTime = new Date().getTime();
+
+            const drainFrameQueue = async function () {
+                while (videoFrames.length) {
+                    let frame = videoFrames.shift();
+                    if (frame.timestamp >= config.trimStart && realTrimUs < 0)
+                        realTrimUs = frame.timestamp;
+
+                    document.getElementById('status').innerText = `${((frame.timestamp+frame.duration)/1000000).toFixed(2)} / ${(videoDurationUs/1000000).toFixed(2)}`;
+                    if (frame.timestamp < realTrimUs || frame.timestamp >= (videoDurationUs - config.trimEnd)) {
+                        frame.close();
+                        continue;
+                    }
+
+                    processFrame(frame, true);
+                    const vFrame = new VideoFrame(renderCanvas, {timestamp: frame.timestamp - realTrimUs, duration: frame.duration});
+                    vEnc.encode(vFrame);
+                    vFrame.close();
+
+                    const previewCtx = videoPreview.getContext('2d');
+                    previewCtx.clearRect(0, 0, videoPreview.width, videoPreview.height);
+                    previewCtx.drawImage(renderCanvas,
+                        0, 0, renderCanvas.width, renderCanvas.height,
+                        0, 0, videoPreview.width, videoPreview.height
+                    );
+                }
+            };
+
+            const drainEvcQueue = async function () {
+                while (encodedChunks.length) {
+                    const [evc, metadata] = encodedChunks.shift();
+                    const avPkt = await LibAVWebCodecsBridge.encodedVideoChunkToPacket(libav, evc, metadata, oStreams[0], 0);
+                    if (typeof outCtx !== "number") {
+                        const bufferedPackets = outAvIo;
+                        bufferedPackets.push(avPkt);
+
+                        [outCtx, , outAvIo,] = await libav.ff_init_muxer({
+                            filename: outputFile, open: true, codecpars: true
+                        }, oStreams);
+                        await libav.avformat_write_header(outCtx, null);
+                        await libav.ff_write_multi(outCtx, avpPkt, bufferedPackets, true);
+                    } else {
+                        await libav.ff_write_multi(outCtx, avpPkt, [avPkt], true);
+                    }
+                }
+            }
+
+            let wakeLock;
+            try {
+                if (navigator.wakeLock) {
+                    try {
+                        wakeLock = await navigator.wakeLock.request("screen");
+                    } catch {}
+                }
+                await libav.avformat_seek_file_max(inCtx, -1, 0, 0, 0);
+                while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
+                    const avPkt = await libav.ff_copyout_packet(avpPkt);
+                    if (avPkt.stream_index === iaStream?.index) {
+                        const framePtsUs = avPkt.pts * iaStream.time_base_num * 1000000 / iaStream.time_base_den;
+                        if (framePtsUs >= realTrimUs && framePtsUs < (videoDurationUs - config.trimEnd)) {
+                            const tsAdj = realTrimUs * iaStream.time_base_den / iaStream.time_base_num / 1000000;
+                            avPkt.pts -= tsAdj;
+                            if (avPkt.pts < 0)
+                                avPkt.ptshi -= 1;
+
+                            avPkt.dts -= tsAdj;
+                            if (avPkt.dts < 0)
+                                avPkt.dtshi -= 1;
+
+                            avPkt.stream_index = 1;
+                            avPkt.time_base_num = iaStream.time_base_num;
+                            avPkt.time_base_den = iaStream.time_base_den;
+                            if (typeof outCtx === "number") {
+                                await libav.ff_write_multi(outCtx, avpPktW, [avPkt], true);
+                            } else {
+                                outAvIo.push(avPkt);
+                            }
+                        }
+                    } else if (avPkt.stream_index === ivStream.index) {
+                        vDec.decode(LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream));
+                        messages++;
+                    }
+
+                    await libav.av_packet_unref(avpPkt);
+                    await drainFrameQueue();
+                    await drainEvcQueue();
+
+                    const maxQ = Math.max(vDec.decodeQueueSize, vEnc.encodeQueueSize);
+                    if (maxQ > 16) {
+                        let now = new Date().getTime();
+                        let messagesPerMs = messages / (now - startTime);
+                        await delay(maxQ / messagesPerMs / 4);
+                    }
+                }
+
+                await vDec.flush();
+                await delay(200);
+                await drainFrameQueue();
+                await vEnc.flush();
+                await delay(200);
+                await drainEvcQueue();
+            } finally {
+                await libav.av_write_trailer(outCtx);
+                await libav.avio_close(outAvIo);
+                await libav.avformat_free_context(outCtx);
+                vEnc.close();
+                await wakeLock?.release();
+            }
+
+            for (let i = 0; i < outputChunks.length; i++) {
+                if (outputChunks[i] instanceof ArrayBuffer && outputChunks[i].resizable) {
+                    const data = outputChunks[i];
+                    outputChunks[i] = new ArrayBuffer((i === (outputChunks.length-1)) ? data.byteLength : outputChunkSize);
+                    new Uint8Array(outputChunks[i]).set(new Uint8Array(data));
+                }
+            }
+
+            const outputBlob = new Blob(outputChunks, {
+                type: outputFile.endsWith('.mkv') ? 'video/matroska' : (outputFile.endsWith('.mp4') ? 'video/mp4' : (outputFile.endsWith('.webm') ? 'video/webm' : 'application/octet-stream'))
+            });
+            outputChunks = [outputBlob];
+            outputUrl = URL.createObjectURL(outputBlob);
+            document.getElementById('download').href = outputUrl;
+            document.getElementById('download').setAttribute('download', outputFile);
+            document.getElementById('status').innerText = 'OK';
+        };
+
+        for (const cfgOption of document.querySelectorAll('div.realtime-update input, div.realtime-update select')) {
+            cfgOption.onchange = updatePreview;
+        }
+
+        document.getElementById('outputDim').onchange = async function() {
+            document.getElementById('outputDim').value = Math.floor(document.getElementById('outputDim').value / 16) * 16;
+            await updatePreview();
+            await updateCodecs();
+        };
+    })();
+</script>
+</body>
+</html>
