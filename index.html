@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>Rotaeno 录屏旋转稳定工具</title>
     <script src="js/libav-5.4.6.1.1-webcodecs.js"></script>
     <script src="js/libavjs-webcodecs-bridge.js"></script>
     <script>
@@ -272,6 +272,12 @@
     <a id="download">下载</a>
 </div>
 
+<hr>
+
+<div>本工具依赖Rotaeno在 <b>直播模式</b> 下在画面四角显示的方块。需要勾选 <b>使用V2直播编码</b> 方可正常使用。</div>
+<div>此工具处理均在设备本地进行，不会上传任何数据。</div>
+<div>使用<a href="https://github.com/Yahweasel/libav.js">libav</a>.<a href="https://github.com/Yahweasel/libavjs-webcodecs-bridge">js</a>打造</div>
+
 <script>
     (async function() {
         /** @type LibAV */
@@ -299,9 +305,6 @@
         let ivConfig;
         /** @type VideoDecoder */
         let vDec;
-
-        /** @type Promise */
-        let frameReady;
 
         /** @type ?File */
         let currentFile;
