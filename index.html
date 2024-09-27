@@ -805,8 +805,11 @@
             }
 
             let messages = 0, realTrimUs = -1, ia4Cc;
+            let seekStart = Math.max(config.trimStart - 100000, 0);
+            let seekLoHi = libav.f64toi64(seekStart);
+
             if (iaStream) {
-                await libav.avformat_seek_file_max(inCtx, -1, 0, 0, 0);
+                await libav.avformat_seek_file_max(inCtx, -1, seekLoHi[0], seekLoHi[1], 0);
                 while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
                     const avPkt = await libav.ff_copyout_packet(avpPkt);
                     if (avPkt.stream_index === iaStream.index) {
@@ -917,19 +920,22 @@
                 }
             }
 
-            let wakeLock;
+            let wakeLock, audioEnd, videoEnd;
             try {
                 if (navigator.wakeLock) {
                     try {
                         wakeLock = await navigator.wakeLock.request("screen");
                     } catch {}
                 }
-                await libav.avformat_seek_file_max(inCtx, -1, 0, 0, 0);
+                await libav.avformat_seek_file_max(inCtx, -1, seekLoHi[0], seekLoHi[1], 0);
                 while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
                     const avPkt = await libav.ff_copyout_packet(avpPkt);
                     if (avPkt.stream_index === iaStream?.index) {
                         const framePtsUs = avPkt.pts * iaStream.time_base_num * 1000000 / iaStream.time_base_den;
-                        if (framePtsUs >= realTrimUs && framePtsUs < (videoDurationUs - config.trimEnd)) {
+                        if (framePtsUs > (videoDurationUs - config.trimEnd))
+                            audioEnd = true;
+
+                        if (framePtsUs >= realTrimUs && !audioEnd) {
                             const tsAdj = realTrimUs * iaStream.time_base_den / iaStream.time_base_num / 1000000;
                             avPkt.pts -= tsAdj;
                             if (avPkt.pts < 0)
@@ -949,6 +955,10 @@
                             }
                         }
                     } else if (avPkt.stream_index === ivStream.index) {
+                        const framePtsUs = avPkt.pts * iaStream.time_base_num * 1000000 / iaStream.time_base_den;
+                        if (framePtsUs > (videoDurationUs - config.trimEnd))
+                            videoEnd = true;
+
                         vDec.decode(LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream));
                         messages++;
                     }
@@ -963,6 +973,9 @@
                         let messagesPerMs = messages / (now - startTime);
                         await delay(maxQ / messagesPerMs / 4);
                     }
+
+                    if (audioEnd && videoEnd)
+                        break;
                 }
 
                 await vDec.flush();
