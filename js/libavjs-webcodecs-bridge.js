@@ -577,9 +577,6 @@
                         if(codecParts.length > 6) yield libav.AVCodecParameters_color_primaries_s(codecpar, parseInt(codecParts[6]));
                         if(codecParts.length > 7) yield libav.AVCodecParameters_color_trc_s(codecpar, parseInt(codecParts[7]));
                         if(codecParts.length > 8) yield libav.AVCodecParameters_color_space_s(codecpar, parseInt(codecParts[8]));
-                        if(codecParts.length > 9) if (codecParts[9] === '1') {
-                            yield libav.AVCodecParameters_color_range_s(codecpar, 2);
-                        }
                         break;
                     }
                     case "h264": if(codecParts.length === 2 && codecParts[1].length === 6) {
@@ -604,9 +601,6 @@
                         if(codecParts.length > 5) yield libav.AVCodecParameters_color_primaries_s(codecpar, parseInt(codecParts[5]));
                         if(codecParts.length > 6) yield libav.AVCodecParameters_color_trc_s(codecpar, parseInt(codecParts[6]));
                         if(codecParts.length > 7) yield libav.AVCodecParameters_color_space_s(codecpar, parseInt(codecParts[7]));
-                        if(codecParts.length > 8) if (codecParts[8] === '01') {
-                            yield libav.AVCodecParameters_color_range_s(codecpar, 2);
-                        }
                         break;
                     }
                 }
