@@ -57,3 +57,4 @@ Add it to the filter stack of the capture device, and resize the output on the c
 6. 关闭脚本对话框
 
 然后滤镜里会多一个 **Rotaeno Stablizer** ，把它加到采集输入的滤镜列表里，然后在场景里调整大小。
+
