@@ -17,9 +17,12 @@
     <script src="js/libavjs-webcodecs-bridge.js"></script>
     <script>
         window.onload = async function() {
-            let translations = {
-                'zh-CN': {},
+            const translations = {
+                'zh-CN': {
+                    compatabilityWarning: '此浏览器过旧或缺少必须功能',
+                },
                 'en': {
+                    compatabilityWarning: 'This browser is too old or lacking features.',
                     analyzeBtn: 'Auto Configure',
                     trimStart: 'Trim: Begin',
                     trimEnd: 'End',
@@ -45,16 +48,38 @@
                 }
             };
 
+            let translation = translations.en;
             for (const language of navigator.languages) {
-                let translation = translations[language] ?? translations[language.split('-')[0]];
-                if (translation) {
+                let trans = translations[language] ?? translations[language.split('-')[0]];
+                if (trans) {
+                    translation = trans;
                     for (const key in translation) {
-                        const element = document.getElementById(key);
-                        (element.labels?.[0] ?? element).innerHTML = translation[key];
+                        let element = document.getElementById(key);
+                        element = (element?.labels?.[0] ?? element);
+                        if (element) {
+                            element.innerHTML = translation[key];
+                        }
                     }
                     break;
                 }
             }
+
+            const featureCheck = {
+                resizableArrayBuffer: () => new ArrayBuffer(0, {maxByteLength: 1024}).resize(1024) || true,
+                webWorker: () => Worker,
+                webCodecs: () => VideoEncoder && VideoDecoder,
+                offscreenCanvas: () => new OffscreenCanvas(16, 16).getContext('2d'),
+            };
+            let failedChecks = []
+            for (const feature in featureCheck) {
+                try {
+                    if(featureCheck[feature]()) continue;
+                } catch {}
+                failedChecks.push(feature);
+            }
+
+            if (failedChecks.length)
+                alert(translation.compatabilityWarning + ' ' + failedChecks.join(', '));
 
             /** @type LibAV */
             const libav = await LibAV.LibAV({noworker: true});
