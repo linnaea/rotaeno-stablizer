@@ -13,16 +13,19 @@
         }
     </style>
 
-    <script src="js/libav-5.4.6.1.1-webcodecs.js"></script>
+    <script src="js/libav-6.0.7.0.2-webcodecs.js"></script>
     <script src="js/libavjs-webcodecs-bridge.js"></script>
     <script>
         window.onload = async function() {
             const translations = {
                 'zh-CN': {
                     compatabilityWarning: '此浏览器过旧或缺少必须功能',
+                    workerDegradation: '当前环境不支持Web Worker多线程模式，性能可能受影响',
                 },
                 'en': {
                     compatabilityWarning: 'This browser is too old or lacking features.',
+                    workerDegradation: 'Web Worker is not supported, expect poor performance.',
+
                     analyzeBtn: 'Auto Configure',
                     trimStart: 'Trim: Begin',
                     trimEnd: 'End',
@@ -65,8 +68,8 @@
             }
 
             const featureCheck = {
+                secureContext: () => isSecureContext,
                 resizableArrayBuffer: () => new ArrayBuffer(0, {maxByteLength: 1024}).resize(1024) || true,
-                webWorker: () => Worker,
                 webCodecs: () => VideoEncoder && VideoDecoder,
                 offscreenCanvas: () => new OffscreenCanvas(16, 16).getContext('2d'),
             };
@@ -82,7 +85,12 @@
                 alert(translation.compatabilityWarning + ' ' + failedChecks.join(', '));
 
             /** @type LibAV */
-            const libav = await LibAV.LibAV({noworker: true});
+            let libav;
+            try {
+                libav = await LibAV.LibAV({noworker: true});
+            } catch {
+                libav = await LibAV.LibAV({noworker: true, nowasm: true});
+            }
 
             /** @typedef PtrAVPacket number */
             /** @type PtrAVPacket */
@@ -197,10 +205,30 @@
             let renderQueue = [];
             let renderIds = [];
             let renderBusy = [];
-            for (let i = 0; i < 5; i++) {
-                renderWorkers.push(new Worker('js/render-worker.js'));
-                renderBusy.push(false);
 
+            for (let i = 0; i < 5; i++) {
+                let noWorker = false;
+                try {
+                    renderWorkers.push(new Worker('js/render-worker.js'));
+                } catch {
+                    if (i !== 0) break;
+                    noWorker = true;
+                    window.renderer = {
+                        onmessage: null,
+                        postMessage: msg => setTimeout(() => window.renderer.proxy.onmessage?.({data: msg})),
+                        proxy: {
+                            onmessage: null,
+                            postMessage: msg => setTimeout(() => window.renderer.onmessage?.({data: msg})),
+                        }
+                    };
+
+                    const renderScript = document.createElement('script');
+                    renderScript.src = 'js/render-worker.js';
+                    document.head.appendChild(renderScript);
+                    renderWorkers.push(window.renderer.proxy);
+                }
+
+                renderBusy.push(false);
                 renderWorkers.at(-1).onmessage = (function(i) {
                     return function (ev) {
                         const [renderId, success, renderFrame, thr, rot] = ev.data;
@@ -229,6 +257,11 @@
                         }
                     };
                 })(i);
+
+                if (noWorker) {
+                    alert(translation.workerDegradation);
+                    break;
+                }
             }
 
             const processFrame = function(frame) {

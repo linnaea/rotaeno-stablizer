@@ -205,6 +205,74 @@ export interface Stream {
 }
 
 /**
+ * Codec parameters, if copied out.
+ */
+export interface CodecParameters {
+    /**
+     * General type of the encoded data.
+     */
+    codec_type: number;
+
+    /**
+     * Specific type of the encoded data (the codec used).
+     */
+    codec_id: number;
+
+    /**
+     * Additional information about the codec (corresponds to the AVI FOURCC).
+     */
+    codec_tag?: number;
+
+    /**
+     * Extra binary data needed for initializing the decoder, codec-dependent.
+     *
+     * Must be allocated with av_malloc() and will be freed by
+     * avcodec_parameters_free(). The allocated size of extradata must be at
+     * least extradata_size + AV_INPUT_BUFFER_PADDING_SIZE, with the padding
+     * bytes zeroed.
+     */
+    extradata?: Uint8Array;
+
+    /**
+     * - video: the pixel format, the value corresponds to enum AVPixelFormat.
+     * - audio: the sample format, the value corresponds to enum AVSampleFormat.
+     */
+    format: number;
+
+    /**
+     * Codec-specific bitstream restrictions that the stream conforms to.
+     */
+    profile?: number;
+    level?: number;
+
+    /**
+     * Video only. The dimensions of the video frame in pixels.
+     */
+    width?: number;
+    height?: number;
+
+    /**
+     * Video only. Additional colorspace characteristics.
+     */
+    color_range?: number;
+    color_primaries?: number;
+    color_trc?: number;
+    color_space?: number;
+    chroma_location?: number;
+
+    /**
+     * Audio only. The number of audio samples per second.
+     */
+    sample_rate?: number;
+
+    /**
+     * Audio only. The channel layout and number of channels.
+     */
+    channel_layoutmask?: number;
+    channels?: number;
+}
+
+/**
  * Settings used to set up a filter.
  */
 export interface FilterIOSettings {
@@ -757,6 +825,7 @@ av_buffersink_get_time_base_den(a0: number): Promise<number>;
  * not enough. The last buffer at EOF will be padded with 0.
  */
 av_buffersink_set_frame_size(ctx: number,frame_size: number): Promise<void>;
+ff_buffersink_set_ch_layout(a0: number,a1: number,a2: number): Promise<number>;
 /**
  * Add a frame to the buffer source.
  *
@@ -883,7 +952,7 @@ avcodec_alloc_context3(codec: number): Promise<number>;
  * the codec-specific data allocated in avcodec_alloc_context3() with a non-NULL
  * codec. Subsequent calls will do nothing.
  *
- * @note Do not use this function. Use avcodec_free_context() to destroy a
+ * @deprecated Do not use this function. Use avcodec_free_context() to destroy a
  * codec context (either open or closed). Opening and closing a codec context
  * multiple times is not supported anymore -- use multiple codec contexts
  * instead.
@@ -952,9 +1021,16 @@ avcodec_get_name(id: number): Promise<string>;
  * avcodec_find_decoder() and avcodec_find_encoder() provide an easy way for
  * retrieving a codec.
  *
- * @note Always call this function before using decoding routines (such as
- * @ref avcodec_receive_frame()).
+ * Depending on the codec, you might need to set options in the codec context
+ * also for decoding (e.g. width, height, or the pixel or audio sample format in
+ * the case the information is not available in the bitstream, as when decoding
+ * raw audio or video).
  *
+ * Options in the codec context can be set either by setting them in the options
+ * AVDictionary, or by setting the values in the context itself, directly or by
+ * using the av_opt_set() API before calling this function.
+ *
+ * Example:
  * @code
  * av_dict_set(&opts, "b", "2.5M", 0);
  * codec = avcodec_find_decoder(AV_CODEC_ID_H264);
@@ -967,17 +1043,36 @@ avcodec_get_name(id: number): Promise<string>;
  *     exit(1);
  * @endcode
  *
+ * In the case AVCodecParameters are available (e.g. when demuxing a stream
+ * using libavformat, and accessing the AVStream contained in the demuxer), the
+ * codec parameters can be copied to the codec context using
+ * avcodec_parameters_to_context(), as in the following example:
+ *
+ * @code
+ * AVStream *stream = ...;
+ * context = avcodec_alloc_context3(codec);
+ * if (avcodec_parameters_to_context(context, stream->codecpar) < 0)
+ *     exit(1);
+ * if (avcodec_open2(context, codec, NULL) < 0)
+ *     exit(1);
+ * @endcode
+ *
+ * @note Always call this function before using decoding routines (such as
+ * @ref avcodec_receive_frame()).
+ *
  * @param avctx The context to initialize.
  * @param codec The codec to open this context for. If a non-NULL codec has been
  *              previously passed to avcodec_alloc_context3() or
  *              for this context, then this parameter MUST be either NULL or
  *              equal to the previously passed codec.
- * @param options A dictionary filled with AVCodecContext and codec-private options.
- *                On return this object will be filled with options that were not found.
+ * @param options A dictionary filled with AVCodecContext and codec-private
+ *                options, which are set on top of the options already set in
+ *                avctx, can be NULL. On return this object will be filled with
+ *                options that were not found in the avctx codec context.
  *
  * @return zero on success, a negative value on error
  * @see avcodec_alloc_context3(), avcodec_find_decoder(), avcodec_find_encoder(),
- *      av_dict_set(), av_opt_find().
+ *      av_dict_set(), av_opt_set(), av_opt_find(), avcodec_parameters_to_context()
  */
 avcodec_open2(avctx: number,codec: number,options: number): Promise<number>;
 /**
@@ -988,9 +1083,16 @@ avcodec_open2(avctx: number,codec: number,options: number): Promise<number>;
  * avcodec_find_decoder() and avcodec_find_encoder() provide an easy way for
  * retrieving a codec.
  *
- * @note Always call this function before using decoding routines (such as
- * @ref avcodec_receive_frame()).
+ * Depending on the codec, you might need to set options in the codec context
+ * also for decoding (e.g. width, height, or the pixel or audio sample format in
+ * the case the information is not available in the bitstream, as when decoding
+ * raw audio or video).
  *
+ * Options in the codec context can be set either by setting them in the options
+ * AVDictionary, or by setting the values in the context itself, directly or by
+ * using the av_opt_set() API before calling this function.
+ *
+ * Example:
  * @code
  * av_dict_set(&opts, "b", "2.5M", 0);
  * codec = avcodec_find_decoder(AV_CODEC_ID_H264);
@@ -1003,17 +1105,36 @@ avcodec_open2(avctx: number,codec: number,options: number): Promise<number>;
  *     exit(1);
  * @endcode
  *
+ * In the case AVCodecParameters are available (e.g. when demuxing a stream
+ * using libavformat, and accessing the AVStream contained in the demuxer), the
+ * codec parameters can be copied to the codec context using
+ * avcodec_parameters_to_context(), as in the following example:
+ *
+ * @code
+ * AVStream *stream = ...;
+ * context = avcodec_alloc_context3(codec);
+ * if (avcodec_parameters_to_context(context, stream->codecpar) < 0)
+ *     exit(1);
+ * if (avcodec_open2(context, codec, NULL) < 0)
+ *     exit(1);
+ * @endcode
+ *
+ * @note Always call this function before using decoding routines (such as
+ * @ref avcodec_receive_frame()).
+ *
  * @param avctx The context to initialize.
  * @param codec The codec to open this context for. If a non-NULL codec has been
  *              previously passed to avcodec_alloc_context3() or
  *              for this context, then this parameter MUST be either NULL or
  *              equal to the previously passed codec.
- * @param options A dictionary filled with AVCodecContext and codec-private options.
- *                On return this object will be filled with options that were not found.
+ * @param options A dictionary filled with AVCodecContext and codec-private
+ *                options, which are set on top of the options already set in
+ *                avctx, can be NULL. On return this object will be filled with
+ *                options that were not found in the avctx codec context.
  *
  * @return zero on success, a negative value on error
  * @see avcodec_alloc_context3(), avcodec_find_decoder(), avcodec_find_encoder(),
- *      av_dict_set(), av_opt_find().
+ *      av_dict_set(), av_opt_set(), av_opt_find(), avcodec_parameters_to_context()
  */
 avcodec_open2_js(avctx: number,codec: number,options: number): Promise<number>;
 /**
@@ -1053,7 +1174,7 @@ avcodec_parameters_from_context(par: number,codec: number): Promise<number>;
 avcodec_parameters_to_context(codec: number,par: number): Promise<number>;
 /**
  * Return decoded output data from a decoder or encoder (when the
- * AV_CODEC_FLAG_RECON_FRAME flag is used).
+ * @ref AV_CODEC_FLAG_RECON_FRAME flag is used).
  *
  * @param avctx codec context
  * @param frame This will be set to a reference-counted video or audio
@@ -1067,10 +1188,7 @@ avcodec_parameters_to_context(codec: number,par: number): Promise<number>;
  * @retval AVERROR_EOF      the codec has been fully flushed, and there will be
  *                          no more output frames
  * @retval AVERROR(EINVAL)  codec not opened, or it is an encoder without the
- *                          AV_CODEC_FLAG_RECON_FRAME flag enabled
- * @retval AVERROR_INPUT_CHANGED current decoded frame has changed parameters with
- *                          respect to first decoded frame. Applicable when flag
- *                          AV_CODEC_FLAG_DROPCHANGED is set.
+ *                          @ref AV_CODEC_FLAG_RECON_FRAME flag enabled
  * @retval "other negative error code" legitimate decoding errors
  */
 avcodec_receive_frame(avctx: number,frame: number): Promise<number>;
@@ -1986,6 +2104,11 @@ mkblockreaderdev(name: string, size: number): Promise<void>;
  */
 mkreadaheadfile(name: string, file: Blob): Promise<void>;
 /**
+ * Unlink a readahead file. Also gets rid of the File reference.
+ * @param name  Filename to unlink.
+ */
+unlinkreadaheadfile(name: string): Promise<void>;
+/**
  * Make a writer device.
  * @param name  Filename to create
  * @param mode  Unix permissions
@@ -2017,6 +2140,20 @@ mkworkerfsfile(name: string, blob: Blob): Promise<string>;
  * @param name  Filename to unmount.
  */
 unlinkworkerfsfile(name: string): Promise<void>;
+/**
+ * Make a FileSystemFileHandle device. This writes via a FileSystemFileHandle,
+ * synchronously if possible. Note that this overrides onwrite, so if you want
+ * to support both kinds of files, make sure you set onwrite before calling
+ * this.
+ * @param name  Filename to create.
+ * @param fsfh  FileSystemFileHandle corresponding to this filename.
+ */
+mkfsfhfile(name: string, fsfh: FileSystemFileHandle): Promise<void>;
+/**
+ * Unlink a FileSystemFileHandle file. Also closes the file handle.
+ * @param name  Filename to unlink.
+ */
+unlinkfsfhfile(name: string): Promise<void>;
 /**
  * Send some data to a reader device. To indicate EOF, send null. To indicate an
  * error, send EOF and include an error code in the options.
@@ -2413,6 +2550,17 @@ ff_copyout_packet_ptr(pkt: number): Promise<number>;
  */
 ff_copyin_packet(pktPtr: number, packet: Packet | number): Promise<void>;
 /**
+ * Copy out codec parameters.
+ * @param codecpar  AVCodecParameters
+ */
+ff_copyout_codecpar(codecpar: number): Promise<CodecParameters>;
+/**
+ * Copy in codec parameters.
+ * @param codecparPtr  AVCodecParameters
+ * @param codecpar  Codec parameters to copy in.
+ */
+ff_copyin_codecpar(codecparPtr: number, codecpar: CodecParameters): Promise<void>;
+/**
  * Allocate and copy in a 32-bit int list.
  * @param list  List of numbers to copy in
  */
@@ -2781,6 +2929,7 @@ av_buffersink_get_time_base_den_sync(a0: number): number;
  * not enough. The last buffer at EOF will be padded with 0.
  */
 av_buffersink_set_frame_size_sync(ctx: number,frame_size: number): void;
+ff_buffersink_set_ch_layout_sync(a0: number,a1: number,a2: number): number;
 /**
  * Add a frame to the buffer source.
  *
@@ -2907,7 +3056,7 @@ avcodec_alloc_context3_sync(codec: number): number;
  * the codec-specific data allocated in avcodec_alloc_context3() with a non-NULL
  * codec. Subsequent calls will do nothing.
  *
- * @note Do not use this function. Use avcodec_free_context() to destroy a
+ * @deprecated Do not use this function. Use avcodec_free_context() to destroy a
  * codec context (either open or closed). Opening and closing a codec context
  * multiple times is not supported anymore -- use multiple codec contexts
  * instead.
@@ -2976,9 +3125,16 @@ avcodec_get_name_sync(id: number): string;
  * avcodec_find_decoder() and avcodec_find_encoder() provide an easy way for
  * retrieving a codec.
  *
- * @note Always call this function before using decoding routines (such as
- * @ref avcodec_receive_frame()).
+ * Depending on the codec, you might need to set options in the codec context
+ * also for decoding (e.g. width, height, or the pixel or audio sample format in
+ * the case the information is not available in the bitstream, as when decoding
+ * raw audio or video).
  *
+ * Options in the codec context can be set either by setting them in the options
+ * AVDictionary, or by setting the values in the context itself, directly or by
+ * using the av_opt_set() API before calling this function.
+ *
+ * Example:
  * @code
  * av_dict_set(&opts, "b", "2.5M", 0);
  * codec = avcodec_find_decoder(AV_CODEC_ID_H264);
@@ -2991,17 +3147,36 @@ avcodec_get_name_sync(id: number): string;
  *     exit(1);
  * @endcode
  *
+ * In the case AVCodecParameters are available (e.g. when demuxing a stream
+ * using libavformat, and accessing the AVStream contained in the demuxer), the
+ * codec parameters can be copied to the codec context using
+ * avcodec_parameters_to_context(), as in the following example:
+ *
+ * @code
+ * AVStream *stream = ...;
+ * context = avcodec_alloc_context3(codec);
+ * if (avcodec_parameters_to_context(context, stream->codecpar) < 0)
+ *     exit(1);
+ * if (avcodec_open2(context, codec, NULL) < 0)
+ *     exit(1);
+ * @endcode
+ *
+ * @note Always call this function before using decoding routines (such as
+ * @ref avcodec_receive_frame()).
+ *
  * @param avctx The context to initialize.
  * @param codec The codec to open this context for. If a non-NULL codec has been
  *              previously passed to avcodec_alloc_context3() or
  *              for this context, then this parameter MUST be either NULL or
  *              equal to the previously passed codec.
- * @param options A dictionary filled with AVCodecContext and codec-private options.
- *                On return this object will be filled with options that were not found.
+ * @param options A dictionary filled with AVCodecContext and codec-private
+ *                options, which are set on top of the options already set in
+ *                avctx, can be NULL. On return this object will be filled with
+ *                options that were not found in the avctx codec context.
  *
  * @return zero on success, a negative value on error
  * @see avcodec_alloc_context3(), avcodec_find_decoder(), avcodec_find_encoder(),
- *      av_dict_set(), av_opt_find().
+ *      av_dict_set(), av_opt_set(), av_opt_find(), avcodec_parameters_to_context()
  */
 avcodec_open2_sync(avctx: number,codec: number,options: number): number;
 /**
@@ -3012,9 +3187,16 @@ avcodec_open2_sync(avctx: number,codec: number,options: number): number;
  * avcodec_find_decoder() and avcodec_find_encoder() provide an easy way for
  * retrieving a codec.
  *
- * @note Always call this function before using decoding routines (such as
- * @ref avcodec_receive_frame()).
+ * Depending on the codec, you might need to set options in the codec context
+ * also for decoding (e.g. width, height, or the pixel or audio sample format in
+ * the case the information is not available in the bitstream, as when decoding
+ * raw audio or video).
  *
+ * Options in the codec context can be set either by setting them in the options
+ * AVDictionary, or by setting the values in the context itself, directly or by
+ * using the av_opt_set() API before calling this function.
+ *
+ * Example:
  * @code
  * av_dict_set(&opts, "b", "2.5M", 0);
  * codec = avcodec_find_decoder(AV_CODEC_ID_H264);
@@ -3027,17 +3209,36 @@ avcodec_open2_sync(avctx: number,codec: number,options: number): number;
  *     exit(1);
  * @endcode
  *
+ * In the case AVCodecParameters are available (e.g. when demuxing a stream
+ * using libavformat, and accessing the AVStream contained in the demuxer), the
+ * codec parameters can be copied to the codec context using
+ * avcodec_parameters_to_context(), as in the following example:
+ *
+ * @code
+ * AVStream *stream = ...;
+ * context = avcodec_alloc_context3(codec);
+ * if (avcodec_parameters_to_context(context, stream->codecpar) < 0)
+ *     exit(1);
+ * if (avcodec_open2(context, codec, NULL) < 0)
+ *     exit(1);
+ * @endcode
+ *
+ * @note Always call this function before using decoding routines (such as
+ * @ref avcodec_receive_frame()).
+ *
  * @param avctx The context to initialize.
  * @param codec The codec to open this context for. If a non-NULL codec has been
  *              previously passed to avcodec_alloc_context3() or
  *              for this context, then this parameter MUST be either NULL or
  *              equal to the previously passed codec.
- * @param options A dictionary filled with AVCodecContext and codec-private options.
- *                On return this object will be filled with options that were not found.
+ * @param options A dictionary filled with AVCodecContext and codec-private
+ *                options, which are set on top of the options already set in
+ *                avctx, can be NULL. On return this object will be filled with
+ *                options that were not found in the avctx codec context.
  *
  * @return zero on success, a negative value on error
  * @see avcodec_alloc_context3(), avcodec_find_decoder(), avcodec_find_encoder(),
- *      av_dict_set(), av_opt_find().
+ *      av_dict_set(), av_opt_set(), av_opt_find(), avcodec_parameters_to_context()
  */
 avcodec_open2_js_sync(avctx: number,codec: number,options: number): number;
 /**
@@ -3077,7 +3278,7 @@ avcodec_parameters_from_context_sync(par: number,codec: number): number;
 avcodec_parameters_to_context_sync(codec: number,par: number): number;
 /**
  * Return decoded output data from a decoder or encoder (when the
- * AV_CODEC_FLAG_RECON_FRAME flag is used).
+ * @ref AV_CODEC_FLAG_RECON_FRAME flag is used).
  *
  * @param avctx codec context
  * @param frame This will be set to a reference-counted video or audio
@@ -3091,10 +3292,7 @@ avcodec_parameters_to_context_sync(codec: number,par: number): number;
  * @retval AVERROR_EOF      the codec has been fully flushed, and there will be
  *                          no more output frames
  * @retval AVERROR(EINVAL)  codec not opened, or it is an encoder without the
- *                          AV_CODEC_FLAG_RECON_FRAME flag enabled
- * @retval AVERROR_INPUT_CHANGED current decoded frame has changed parameters with
- *                          respect to first decoded frame. Applicable when flag
- *                          AV_CODEC_FLAG_DROPCHANGED is set.
+ *                          @ref AV_CODEC_FLAG_RECON_FRAME flag enabled
  * @retval "other negative error code" legitimate decoding errors
  */
 avcodec_receive_frame_sync(avctx: number,frame: number): number;
@@ -4010,6 +4208,11 @@ mkblockreaderdev_sync(name: string, size: number): void;
  */
 mkreadaheadfile_sync(name: string, file: Blob): void;
 /**
+ * Unlink a readahead file. Also gets rid of the File reference.
+ * @param name  Filename to unlink.
+ */
+unlinkreadaheadfile_sync(name: string): void;
+/**
  * Make a writer device.
  * @param name  Filename to create
  * @param mode  Unix permissions
@@ -4041,6 +4244,20 @@ mkworkerfsfile_sync(name: string, blob: Blob): string;
  * @param name  Filename to unmount.
  */
 unlinkworkerfsfile_sync(name: string): void;
+/**
+ * Make a FileSystemFileHandle device. This writes via a FileSystemFileHandle,
+ * synchronously if possible. Note that this overrides onwrite, so if you want
+ * to support both kinds of files, make sure you set onwrite before calling
+ * this.
+ * @param name  Filename to create.
+ * @param fsfh  FileSystemFileHandle corresponding to this filename.
+ */
+mkfsfhfile(name: string, fsfh: FileSystemFileHandle): Promise<void>;
+/**
+ * Unlink a FileSystemFileHandle file. Also closes the file handle.
+ * @param name  Filename to unlink.
+ */
+unlinkfsfhfile(name: string): Promise<void>;
 /**
  * Send some data to a reader device. To indicate EOF, send null. To indicate an
  * error, send EOF and include an error code in the options.
@@ -4436,6 +4653,17 @@ ff_copyout_packet_ptr_sync(pkt: number): number;
  * @param packet  Packet to copy in, as either a Packet or an AVPacket pointer
  */
 ff_copyin_packet_sync(pktPtr: number, packet: Packet | number): void;
+/**
+ * Copy out codec parameters.
+ * @param codecpar  AVCodecParameters
+ */
+ff_copyout_codecpar_sync(codecpar: number): CodecParameters;
+/**
+ * Copy in codec parameters.
+ * @param codecparPtr  AVCodecParameters
+ * @param codecpar  Codec parameters to copy in.
+ */
+ff_copyin_codecpar_sync(codecparPtr: number, codecpar: CodecParameters): void;
 /**
  * Allocate and copy in a 32-bit int list.
  * @param list  List of numbers to copy in
