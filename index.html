@@ -1059,7 +1059,7 @@
                                 }
                             }
                         } else if (avPkt.stream_index === ivStream.index) {
-                            const framePtsUs = avPkt.pts * iaStream.time_base_num * 1000000 / iaStream.time_base_den;
+                            const framePtsUs = avPkt.pts * ivStream.time_base_num * 1000000 / ivStream.time_base_den;
                             if (framePtsUs > (videoDurationUs - config.trimEnd)) {
                                 videoEnd = true;
                             } else {
