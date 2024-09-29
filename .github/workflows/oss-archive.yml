@@ -1,0 +1,27 @@
+name: Copy archive to OSS
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Mongoose
+        run: wget https://github.com/cesanta/binary/releases/download/exe/mongoose.exe -O $GITHUB_WORKSPACE/mongoose.exe
+      - name: Create Archive
+        run: git archive --format=zip --output=rotaeno-stablizer.zip --add-file=mongoose.exe -9 HEAD
+      - name: Install OSSUtil
+        run: sudo -v ; curl https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
+      - name: Upload to OSS
+        env:
+          AKID: ${{ secrets.ACCESSKEY_ID }}
+          AKS: ${{ secrets.ACCESSKEY_SECRET }}
+        run: |
+          now=$(date +%s)
+          ossutil config -e https://oss-cn-shanghai.aliyuncs.com -i $AKID -k $AKS
+          ossutil cp rotaeno-stablizer.zip oss://rotaeno-stablizer/rotaeno-stablizer-$now.zip
+          ossutil create-symlink oss://rotaeno-stablizer/rotaeno-stablizer.zip oss://rotaeno-stablizer/rotaeno-stablizer-$now.zip
