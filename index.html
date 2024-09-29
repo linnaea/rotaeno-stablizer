@@ -208,7 +208,7 @@
             let renderIds = [];
             let renderBusy = [];
 
-            for (let i = 0; i < 5; i++) {
+            for (let i = 0; i < 6; i++) {
                 let noWorker = false;
                 try {
                     renderWorkers.push(new Worker('js/render-worker.js'));
@@ -1024,7 +1024,7 @@
                     }
                 }
 
-                let wakeLock, audioEnd, videoEnd;
+                let wakeLock, audioEnd, videoEnd, lastFrame;
                 try {
                     if (navigator.wakeLock) {
                         try {
@@ -1060,15 +1060,16 @@
                             }
                         } else if (avPkt.stream_index === ivStream.index) {
                             const framePtsUs = avPkt.pts * iaStream.time_base_num * 1000000 / iaStream.time_base_den;
-                            if (framePtsUs > (videoDurationUs - config.trimEnd))
+                            if (framePtsUs > (videoDurationUs - config.trimEnd)) {
                                 videoEnd = true;
-
-                            vDec.decode(LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream));
-                            messages++;
+                            } else {
+                                vDec.decode(LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream));
+                                messages++;
+                            }
                         }
 
                         await libav.av_packet_unref(avpPkt);
-                        await drainFrameQueue();
+                        lastFrame = (await drainFrameQueue()).at(-1) ?? lastFrame;
                         await drainEvcQueue();
 
                         const maxQ = Math.max(vDec.decodeQueueSize, vEnc.encodeQueueSize);
@@ -1083,7 +1084,7 @@
                     }
 
                     await vDec.flush();
-                    await Promise.all(await drainFrameQueue());
+                    await ((await drainFrameQueue()).at(-1) ?? lastFrame);
                     await vEnc.flush();
                     await drainEvcQueue();
                 } finally {
