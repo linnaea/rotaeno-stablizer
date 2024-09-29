@@ -80,4 +80,4 @@
         messaging.postMessage([renderId, blockImage, renderFrame, thr, rot], [blockImage, renderFrame]);
         frame.close();
     }
-})(document ? renderer : self);
+})(self.renderWorkerCompat ?? self);

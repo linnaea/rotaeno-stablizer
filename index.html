@@ -43,6 +43,7 @@
                     outputDim: 'Output: Resolution',
                     outputCodec: 'Codec',
                     outputBitrate: 'Bitrate',
+                    keyInterval: 'Keyframe Interval',
                     encodeBtn: 'Encode',
                     download: 'Download',
                     credit1: '<span style="font-weight: bold; color: yellow">Streaming Mode</span> and <span style="font-weight: bold; color: yellow">Stream Encoding V2</span> must be enabled in game settings.',
@@ -142,6 +143,7 @@
                 trimStart: v => parseFloat(v) * 1000000,
                 trimEnd: v => parseFloat(v) * 1000000,
                 outputBitrate: v => parseFloat(v) * 1000000,
+                keyInterval: v => parseFloat(v) * 1000000
             }
 
             /** @type {VideoFrame[]} */
@@ -213,19 +215,19 @@
                 } catch {
                     if (i !== 0) break;
                     noWorker = true;
-                    window.renderer = {
+                    window.renderWorkerCompat = {
                         onmessage: null,
-                        postMessage: msg => setTimeout(() => window.renderer.proxy.onmessage?.({data: msg})),
+                        postMessage: msg => setTimeout(() => window.renderWorkerCompat.proxy.onmessage?.({data: msg})),
                         proxy: {
                             onmessage: null,
-                            postMessage: msg => setTimeout(() => window.renderer.onmessage?.({data: msg})),
+                            postMessage: msg => setTimeout(() => window.renderWorkerCompat.onmessage?.({data: msg})),
                         }
                     };
 
                     const renderScript = document.createElement('script');
                     renderScript.src = 'js/render-worker.js';
                     document.head.appendChild(renderScript);
-                    renderWorkers.push(window.renderer.proxy);
+                    renderWorkers.push(window.renderWorkerCompat.proxy);
                 }
 
                 renderBusy.push(false);
@@ -424,7 +426,7 @@
                             [62, 139264, 16711680],
                         ],
                         profiles: [
-                            '6408', '4d00', '4200'
+                            '640c', '4d0c', '4200'
                         ],
                         format: (level, profile) => `avc1.${profile}${level.toString(16).padStart(2, '0')}`,
                         describe: str => {
@@ -977,7 +979,7 @@
 
                         let keyFrame = false;
                         if (lastKeyFrame < 0) lastKeyFrame = frame.timestamp;
-                        if ((frame.timestamp + frame.duration) > (lastKeyFrame + 6000000)) {
+                        if (config.keyInterval >= 0 && ((frame.timestamp + frame.duration) > (lastKeyFrame + config.keyInterval))) {
                             keyFrame = true;
                             lastKeyFrame = frame.timestamp;
                         }
@@ -1002,6 +1004,9 @@
                 const drainEvcQueue = async function () {
                     while (encodedChunks.length) {
                         const [evc, metadata] = encodedChunks.shift();
+                        if (evc.type === "key")
+                            lastKeyFrame = Math.max(lastKeyFrame, evc.timestamp);
+
                         const avPkt = await LibAVWebCodecsBridge.encodedVideoChunkToPacket(libav, evc, metadata, oStreams[0], 0);
                         if (typeof outCtx !== "number") {
                             const bufferedPackets = outAvIo;
@@ -1169,8 +1174,12 @@
 
 <div>
     <label for="outputDim">输出分辨率</label><input type="number" id="outputDim" min="160" max="5968" step="16" value="1600"/>
-    <label for="outputCodec">输出编码</label><select id="outputCodec"></select>
     <label for="outputBitrate">码率</label><input type="number" id="outputBitrate" min="1" max="50" step="0.1" value="10"/>
+</div>
+
+<div>
+    <label for="outputCodec">输出编码</label><select id="outputCodec"></select>
+    <label for="keyInterval">关键帧间隔</label><input type="number" id="keyInterval" min="-1" max="10" step="1" value="10"/>
     <button id="encodeBtn">编码</button>
     <a id="download">下载</a>
 </div>
