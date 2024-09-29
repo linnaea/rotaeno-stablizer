@@ -17,6 +17,45 @@
     <script src="js/libavjs-webcodecs-bridge.js"></script>
     <script>
         window.onload = async function() {
+            let translations = {
+                'zh-CN': {},
+                'en': {
+                    analyzeBtn: 'Auto Configure',
+                    trimStart: 'Trim: Begin',
+                    trimEnd: 'End',
+                    orientation: 'Orientation',
+                    oUpright: 'Upright',
+                    cropL: 'Crop: Left',
+                    cropT: 'Top',
+                    cropR: 'Right',
+                    cropB: 'Bottom',
+                    threshold: 'Coding Blocks: Threshold',
+                    blockSize: 'Size',
+                    circleRadius: 'Background Circle: Radius',
+                    circleStroke: 'Thickness',
+                    previews: 'Previews',
+                    outputDim: 'Output: Resolution',
+                    outputCodec: 'Codec',
+                    outputBitrate: 'Bitrate',
+                    encodeBtn: 'Encode',
+                    download: 'Download',
+                    credit1: '<span style="font-weight: bold; color: yellow">Streaming Mode</span> and <span style="font-weight: bold; color: yellow">Stream Encoding V2</span> must be enabled in game settings.',
+                    credit2: 'All processing is done locally, no data will be uploaded.',
+                    credit3: 'Powered by <a href="https://github.com/Yahweasel/libav.js">libav</a>.<a href="https://github.com/Yahweasel/libavjs-webcodecs-bridge">js</a>',
+                }
+            };
+
+            for (const language of navigator.languages) {
+                let translation = translations[language] ?? translations[language.split('-')[0]];
+                if (translation) {
+                    for (const key in translation) {
+                        const element = document.getElementById(key);
+                        (element.labels?.[0] ?? element).innerHTML = translation[key];
+                    }
+                    break;
+                }
+            }
+
             /** @type LibAV */
             const libav = await LibAV.LibAV({noworker: true});
 
@@ -714,7 +753,7 @@
                 await updateCodecs();
             };
 
-            document.getElementById('previewBtn').onclick = async function () {
+            document.getElementById('analyzeBtn').onclick = async function () {
                 peakFramerate = 0;
                 config = getParameters();
 
@@ -1037,7 +1076,7 @@
 
 <div>
     <input type="file" id="inputFile" accept=".ogv,.mkv,.webm,.mp4" />
-    <button id="previewBtn">自动裁切</button>
+    <button id="analyzeBtn">自动裁切</button>
 </div>
 
 <div class="realtime-update">
@@ -1080,9 +1119,9 @@
 
 <hr>
 
-<div>本工具依赖Rotaeno在 <b>直播模式</b> 下在画面四角显示的方块。需要勾选 <b>使用V2直播编码</b> 方可正常使用。</div>
-<div>此工具处理均在设备本地进行，不会上传任何数据。</div>
-<div>使用<a href="https://github.com/Yahweasel/libav.js">libav</a>.<a href="https://github.com/Yahweasel/libavjs-webcodecs-bridge">js</a>打造</div>
+<div id="credit1">本工具依赖Rotaeno在 <span style="font-weight: bold; color: yellow">直播模式</span> 下在画面四角显示的方块。需要勾选 <span style="font-weight: bold; color: yellow">使用V2直播编码</span> 方可正常使用。</div>
+<div id="credit2">此工具处理均在设备本地进行，不会上传任何数据。</div>
+<div id="credit3">使用<a href="https://github.com/Yahweasel/libav.js">libav</a>.<a href="https://github.com/Yahweasel/libavjs-webcodecs-bridge">js</a>打造</div>
 
 <script>
 </script>
