@@ -2,15 +2,16 @@ let blockCanvasCtx = new OffscreenCanvas(80, 20).getContext('2d', {willReadFrequ
 let renderCtx = new OffscreenCanvas(1088, 1088).getContext('2d');
 
 onmessage = async function(event) {
-    const [renderId, config, frame, scale, prevRot] = event.data;
-    if (frame instanceof ImageBitmap) {
-        frame['displayHeight'] = frame.height;
-        frame['displayWidth'] = frame.width;
+    let [renderId, config, frame, scale, prevRot] = event.data;
+    if (frame instanceof VideoFrame) {
+        let bmp = await createImageBitmap(frame);
+        frame.close()
+        frame = bmp;
     }
 
     const blockSize = config.blockSize;
-    const frameWidth = frame.displayWidth - config.cropL - config.cropR;
-    const frameHeight = frame.displayHeight - config.cropT - config.cropB;
+    const frameWidth = frame.width - config.cropL - config.cropR;
+    const frameHeight = frame.height - config.cropT - config.cropB;
 
     if (blockCanvasCtx?.canvas.height !== blockSize)
         blockCanvasCtx = new OffscreenCanvas(blockSize*4, blockSize).getContext('2d', {willReadFrequently: true});
@@ -41,12 +42,7 @@ onmessage = async function(event) {
         if (typeof prevRot === 'number') {
             rot = prevRot;
         } else {
-            let returnFrame = frame;
-            if (frame instanceof VideoFrame) {
-                returnFrame = await createImageBitmap(frame);
-                frame.close();
-            }
-            postMessage([renderId, 0, returnFrame, thr, scale], [returnFrame]);
+            postMessage([renderId, 0, frame, thr, scale], [frame]);
             return;
         }
     } else {

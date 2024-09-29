@@ -9,7 +9,7 @@
             color: white;
         }
         a:link, a:visited {
-            color: cyan;
+            color: skyblue;
         }
     </style>
 
@@ -133,7 +133,7 @@
             let renderQueue = [];
             let renderIds = [];
             let renderBusy = [];
-            for (let i = 0; i < 6; i++) {
+            for (let i = 0; i < 5; i++) {
                 renderWorkers.push(new Worker('js/render-worker.js'));
                 renderBusy.push(false);
 
@@ -240,7 +240,6 @@
                 config = getParameters();
                 resetGraph();
 
-                document.getElementById('status').innerText = 'Rendering';
                 const previewTimestamps = Array.from({length: config.previews * config.previews},
                     (_, n) => (videoDurationUs - config.trimStart - config.trimEnd) / (config.previews * config.previews - 1) * n + config.trimStart);
 
@@ -252,19 +251,22 @@
                     while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
                         const avPkt = await libav.ff_copyout_packet(avpPkt);
                         if (avPkt.stream_index !== ivStream.index) continue;
-                        vDec.decode(LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream));
+                        let evc = LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream);
+                        vDec.decode(evc);
                         await libav.av_packet_unref(avpPkt);
-                        await delay(0);
+                        if (vDec.decodeQueueSize > 2)
+                            await delay(evc.duration * vDec.decodeQueueSize / 2000);
 
                         if (videoFrames.length) {
                             prevRot = 0;
                             const frame = videoFrames.shift();
-                            if (frame.timestamp < ts) {
+                            document.getElementById('status').innerText = `Rendering ${(frame.timestamp/1000000).toFixed(2)}/${(videoDurationUs/1000000).toFixed(2)}`;
+                            if (frame.timestamp + frame.duration <= ts) {
                                 frame.close();
                                 continue;
                             }
 
-                            (await processFrame(frame))[0].then((function(previewIndex) {
+                            const process = (await processFrame(frame))[0].then((function(previewIndex) {
                                 return previewFrame => {
                                     if (!previewCtx) {
                                         outputDim = config.outputDim;
@@ -283,15 +285,16 @@
                             })(previewIndex++));
 
                             await vDec.flush();
-                            await delay(0);
-                            while (videoFrames.length)
-                                videoFrames.pop().close();
+                            if (ts === previewTimestamps.at(-1))
+                                await process;
 
                             break;
                         }
                     }
                 }
 
+                videoFrames.forEach(f => f.close());
+                videoFrames.length = 0;
                 document.getElementById('status').innerText = 'OK';
             };
 
@@ -692,7 +695,7 @@
                         if (f.duration)
                             peakFramerate = Math.max(peakFramerate, 1000000 / f.duration);
 
-                        if (videoFrames.length > 3) {
+                        if (videoFrames.length > 2) {
                             const frame = await createImageBitmap(f);
                             frame['displayHeight'] = f.displayHeight;
                             frame['displayWidth'] = f.displayWidth;
