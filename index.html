@@ -339,10 +339,7 @@
                                 renderWorkers[i].postMessage([renderId, config, frame, scale, null], [frame]);
                                 renderBusy[i] = true;
 
-                                resolve([renderCb[0].then(v => {
-                                    const [blockImage, renderFrame, thr, rot] = v;
-                                    return renderFrame;
-                                })]);
+                                resolve([renderCb[0].then(v => v[1])]);
                                 return;
                             }
                         }
@@ -1243,19 +1240,21 @@
             document.getElementById('btnNextStep').onclick = function() {
                 goToStep(currentStep + 1);
             }
+
+            goToStep(0);
         };
     </script>
 </head>
 <body>
 
 <div><canvas id="preview"></canvas></div>
-<p id="seekControl" style="display: none"><label for="seekPosition">视频定位</label><input type="range" id="seekPosition" min="0" value="0" step="0.1" /><span id="seekTimestamp">0</span></p>
+<p id="seekControl" style="display: none"><label for="seekPosition">视频定位</label> <input type="range" id="seekPosition" min="0" value="0" step="0.1" /><span id="seekTimestamp">0</span></p>
 
 <hr>
 
-<div id="status" style="height: 2em">&nbsp;</div>
+<div id="status" style="height: 2em">Loading</div>
 
-<div data-step="FILE">
+<div data-step="FILE" style="display: none">
     <input type="file" id="inputFile" accept=".ogv,.mkv,.webm,.mp4" />
 </div>
 
@@ -1268,38 +1267,38 @@
 
 <div class="realtime-update" data-step="CROP" style="display: none">
     <p><span id="cropInstruction">调整裁切使红色线对齐画面边缘，或者使用</span><button type="button" id="analyzeBtn">自动裁切</button></p>
-    <label for="cropL">左</label><input type="number" id="cropL" min="0" max="99" step="1" value="0"/>px
-    <label for="cropT">上</label><input type="number" id="cropT" min="0" max="99" step="1" value="0"/>px
+    <label for="cropL">左</label> <input type="number" id="cropL" min="0" max="99" step="1" value="0"/>px
+    <label for="cropT">上</label> <input type="number" id="cropT" min="0" max="99" step="1" value="0"/>px
     <br>
-    <label for="cropR">右</label><input type="number" id="cropR" min="0" max="99" step="1" value="0"/>px
-    <label for="cropB">下</label><input type="number" id="cropB" min="0" max="99" step="1" value="0"/>px
+    <label for="cropR">右</label> <input type="number" id="cropR" min="0" max="99" step="1" value="0"/>px
+    <label for="cropB">下</label> <input type="number" id="cropB" min="0" max="99" step="1" value="0"/>px
 </div>
 
 <div class="realtime-update" data-step="CODE_BLOCK" style="display: none">
     <p id="blockSizeInstruction">调整大小使色块被红绿线包住，建议定位到有白色或黄色色块的时间操作</p>
-    <label for="blockSize">大小</label><input type="number" id="blockSize" min="1" max="32" step="1" value="8"/>px
-    <label for="threshold">阈值</label><input type="number" id="threshold" min="0" max="127" step="1" value="63"/>
+    <label for="blockSize">大小</label> <input type="number" id="blockSize" min="1" max="32" step="1" value="8"/>px
+    <label for="threshold">阈值</label> <input type="number" id="threshold" min="0" max="127" step="1" value="63"/>
 </div>
 
 <div class="realtime-update" data-step="RING" style="display: none">
     <p id="backgroundRingInstruction">配置背景圆环，若要隐藏可在半径选项中填0</p>
-    <label for="ringRadius">半径</label><input type="number" id="ringRadius" min="0" max="3000" step="1" value="0"/>px
-    <label for="ringStroke">粗细</label><input type="number" id="ringStroke" min="1" max="32" step="1" value="8"/>px
+    <label for="ringRadius">半径</label> <input type="number" id="ringRadius" min="0" max="3000" step="1" value="0"/>px
+    <label for="ringStroke">粗细</label> <input type="number" id="ringStroke" min="1" max="32" step="1" value="8"/>px
 </div>
 
 <div data-step="TRIM" style="display: none">
     <p id="videoTrimInstruction">视频裁剪</p>
-    <label for="trimStart">开头</label><input type="number" id="trimStart" min="0" max="6" step="0.1" value="2"/>s
-    <label for="trimEnd">结尾</label><input type="number" id="trimEnd" min="0" max="6" step="0.1" value="2"/>s
+    <label for="trimStart">开头</label> <input type="number" id="trimStart" min="0" max="6" step="0.1" value="2"/>s
+    <label for="trimEnd">结尾</label> <input type="number" id="trimEnd" min="0" max="6" step="0.1" value="2"/>s
 </div>
 
 <div data-step="CODEC" style="display: none">
-    <label for="outputDim">分辨率</label><input type="number" id="outputDim" min="160" max="5968" step="16" value="1088"/>
-    <label for="outputBitrate">码率</label><input type="number" id="outputBitrate" min="1" max="50" step="0.1" value="10"/>Mbps
+    <label for="outputDim">分辨率</label> <input type="number" id="outputDim" min="160" max="5968" step="16" value="1088"/>
+    <label for="outputBitrate">码率</label> <input type="number" id="outputBitrate" min="1" max="50" step="0.1" value="10"/>Mbps
     <br>
-    <label for="outputCodec">编码</label><select id="outputCodec"></select>
+    <label for="outputCodec">编码</label> <select id="outputCodec"></select>
     <br>
-    <label for="keyInterval">关键帧间隔</label><input type="number" id="keyInterval" min="-1" max="10" step="1" value="10"/>s
+    <label for="keyInterval">关键帧间隔</label> <input type="number" id="keyInterval" min="-1" max="10" step="1" value="10"/>s
     <p id="encodeReadyMsg">点击下一步开始编码</p>
 </div>
 
