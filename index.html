@@ -49,10 +49,12 @@
                 'zh-CN': {
                     compatabilityWarning: '此浏览器过旧或缺少必须功能',
                     workerDegradation: '当前环境不支持Web Worker多线程模式，性能可能受影响',
+                    encodeDoneMessage: '编码已完成',
                 },
                 'en': {
                     compatabilityWarning: 'This browser is too old or lacking features.',
                     workerDegradation: 'Web Worker is not supported, expect poor performance.',
+                    encodeDoneMessage: 'Encoding completed',
 
                     analyzeBtn: 'Auto Configure',
                     videoTrimInstruction: 'Set the start point and end point in the video.',
@@ -426,6 +428,7 @@
                         encodeVideo();
                         document.getElementById('seekControl').style.display = 'none';
                         document.getElementById('stepControl').style.display = 'none';
+                        window.Notification?.requestPermission();
                         return;
                     case ALL_STEPS.RING:
                         let frameWidth = previewFrame.width - config.cropL - config.cropR;
@@ -1225,6 +1228,13 @@
                 document.getElementById('download').href = outputUrl;
                 document.getElementById('download').setAttribute('download', outputFile);
                 document.getElementById('status').textContent = 'OK';
+                document.getElementById('encodingMsg').style.display = 'none';
+
+                if (window.Notification?.permission === "granted") {
+                    new Notification(translation.encodeDoneMessage);
+                } else {
+                    alert(translation.encodeDoneMessage);
+                }
             };
 
             for (const cfgOption of document.querySelectorAll('div.realtime-update input, div.realtime-update select')) {
@@ -1306,7 +1316,9 @@
     <span id="encodingMsg">编码中，请耐心等待，不要关闭网页。编码完成后可点击链接</span><a id="download">下载</a>
 </div>
 
-<p id="stepControl" style="display: none"><button type="button" id="btnNextStep">下一步</button></p>
+<p id="stepControl" style="display: none">
+    <button type="button" id="btnNextStep">下一步</button>
+</p>
 
 <hr>
 
