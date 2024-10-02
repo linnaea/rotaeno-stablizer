@@ -2,10 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
     <title>Rotaeno 录屏旋转稳定工具</title>
     <style>
         body {
             background-color: black;
+            font-family: system-ui, sans-serif;
             color: white;
         }
         a:link, a:visited {
@@ -16,6 +19,31 @@
     <script src="js/libav-6.0.7.0.2-webcodecs.js"></script>
     <script src="js/libavjs-webcodecs-bridge.js"></script>
     <script>
+        const Lock = function() {
+            const queue = [];
+            let locked = false;
+
+            this.acquire = function() {
+                if (!locked) {
+                    locked = true;
+                    return Promise.resolve();
+                }
+
+                let r = new Promise(r => {
+                    queue.push(r);
+                });
+
+                return r.then(() => {
+                    locked = true;
+                });
+            };
+            this.release = function() {
+                locked = false;
+                if (queue.length)
+                    (queue.shift())();
+            };
+        };
+
         window.onload = async function() {
             const translations = {
                 'zh-CN': {
@@ -27,24 +55,30 @@
                     workerDegradation: 'Web Worker is not supported, expect poor performance.',
 
                     analyzeBtn: 'Auto Configure',
-                    trimStart: 'Trim: Begin',
+                    videoTrimInstruction: 'Set the start point and end point in the video.',
+                    trimStart: 'Start',
                     trimEnd: 'End',
                     orientation: 'Orientation',
                     oUpright: 'Upright',
-                    cropL: 'Crop: Left',
+                    cropInstruction: 'Adjust cropping to align the red line with outer edge of game capture, or click ',
+                    cropL: 'Left',
                     cropT: 'Top',
                     cropR: 'Right',
                     cropB: 'Bottom',
-                    threshold: 'Coding Blocks: Threshold',
+                    blockSizeInstruction: 'Adjust size to align the green line with edge of the color blocks.<br>It\'s recommended to seek to a position where one of the blocks is showing yellow or white.',
+                    threshold: 'Threshold',
+                    seekPosition: 'Seek',
                     blockSize: 'Size',
-                    circleRadius: 'Background Ring: Radius',
-                    circleStroke: 'Thickness',
-                    previews: 'Previews',
-                    outputDim: 'Output: Resolution',
+                    backgroundRingInstruction: 'To disable the addition of the circle in the background, set radius to 0.',
+                    ringRadius: 'Radius',
+                    ringStroke: 'Width',
+                    btnNextStep: 'Next',
+                    encodeReadyMsg: 'Click "Next" to start encoding.',
+                    outputDim: 'Resolution',
                     outputCodec: 'Codec',
                     outputBitrate: 'Bitrate',
                     keyInterval: 'Keyframe Interval',
-                    encodeBtn: 'Encode',
+                    encodingMsg: 'Encoding in progress. Please keep this page open if using a mobile device. Once done, click the link to ',
                     download: 'Download',
                     credit1: '<span style="font-weight: bold; color: yellow">Streaming Mode</span> and <span style="font-weight: bold; color: yellow">Stream Encoding V2</span> must be enabled in game settings.',
                     credit2: 'All processing is done locally, no data will be uploaded.',
@@ -100,11 +134,7 @@
             const avpPktW = await libav.av_packet_alloc();
 
             /** @type HTMLCanvasElement */
-            const videoPreview = document.getElementById('preview');
-            /** @type HTMLCanvasElement */
-            const rotGraph = document.getElementById('rotGraph');
-            /** @type HTMLCanvasElement */
-            const thrGraph = document.getElementById('thrGraph');
+            const previewCanvas = document.getElementById('preview');
 
             /** @typedef PtrAVFormatContext number */
             /** @type PtrAVFormatContext */
@@ -120,16 +150,30 @@
             let currentFile;
             libav.onblockread = async function (filename, pos, length) {
                 if (!currentFile || filename !== currentFile.name) {
-                    await libav.ff_block_reader_dev_send(filename, pos, null);
+                    await libav.ff_block_reader_dev_send(filename, pos, null, {errorCode: libav.EIO});
                 } else {
                     await libav.ff_block_reader_dev_send(filename, pos,
                         new Uint8Array(await currentFile.slice(pos, pos+length).arrayBuffer()));
                 }
             };
 
+            let currentStep = 0;
+            const ALL_STEPS = [
+                'FILE',
+                // 'ORIENTATION',
+                'CROP',
+                'CODE_BLOCK',
+                'RING',
+                'TRIM',
+                'CODEC',
+                'OUTPUT'
+            ];
+
+            for (let i = 0; i < ALL_STEPS.length; i++)
+                ALL_STEPS[ALL_STEPS[i]] = i;
+
             let config;
             const allParams = {
-                previews: parseInt,
                 threshold: parseInt,
                 blockSize: parseInt,
                 orientation: v => v.split(',').map(n => parseInt(n)),
@@ -138,18 +182,22 @@
                 cropR: parseInt,
                 cropB: parseInt,
                 outputDim: parseInt,
-                circleRadius: parseInt,
-                circleStroke: parseInt,
+                ringRadius: parseInt,
+                ringStroke: parseInt,
                 trimStart: v => parseFloat(v) * 1000000,
                 trimEnd: v => parseFloat(v) * 1000000,
                 outputBitrate: v => parseFloat(v) * 1000000,
                 keyInterval: v => parseFloat(v) * 1000000
             }
 
+            let seekLock = new Lock();
             /** @type {VideoFrame[]} */
             const videoFrames = [];
             /** @type number */
             let scale = 1, videoDurationUs, peakFramerate, totalFrames, prevRot;
+
+            /** @type ImageBitmap */
+            let previewFrame;
 
             /** @type string */
             let outputFile, outputUrl;
@@ -201,8 +249,7 @@
                 return config = p;
             }
 
-            /** @type {Worker[]} */ let renderWorkers = [];
-
+            /** @type {{onmessage: ?function({data:any}), postMessage: function(any, any[])}[]} */ let renderWorkers = [];
             /** @type {[Promise<[ImageBitmap, ImageBitmap, number, number]>, function][]} */
             let renderQueue = [];
             let renderIds = [];
@@ -267,22 +314,16 @@
             }
 
             const processFrame = function(frame) {
-                const frameWidth = frame.displayWidth - config.cropL - config.cropR;
-                const frameHeight = frame.displayHeight - config.cropT - config.cropB;
+                const frameWidth = (frame.displayWidth ?? frame.width) - config.cropL - config.cropR;
+                const frameHeight = (frame.displayHeight ?? frame.height) - config.cropT - config.cropB;
 
                 if (!scale) {
                     let outputDim = Math.floor(Math.sqrt(frameWidth * frameWidth + frameHeight * frameHeight));
-                    let mbDim = Math.ceil(outputDim / 16) * 16;
+                    let mbDim = Math.floor(outputDim / 16) * 16;
                     document.getElementById('outputDim').max = Math.min(mbDim, 5968);
                     document.getElementById('outputDim').value = config.outputDim = Math.min(config.outputDim, mbDim, 5968);
 
                     scale = Math.min(config.outputDim / outputDim, 1);
-                    outputDim = config.outputDim;
-
-                    if (rotGraph.width !== outputDim / 2) {
-                        thrGraph.width = rotGraph.width = videoPreview.width = videoPreview.height = outputDim / 2;
-                        resetGraph();
-                    }
                 }
 
                 return new Promise(resolve => {
@@ -300,16 +341,6 @@
 
                                 resolve([renderCb[0].then(v => {
                                     const [blockImage, renderFrame, thr, rot] = v;
-                                    let graphCtx;
-                                    const outputDim = config.outputDim;
-                                    const tsX = outputDim / 2 / videoDurationUs;
-                                    graphCtx = thrGraph.getContext('2d');
-                                    graphCtx.fillStyle = 'white';
-                                    graphCtx.fillRect(frame.timestamp * tsX, 127-thr, Math.max(1,frame.duration*tsX), 1);
-                                    graphCtx = rotGraph.getContext('2d');
-                                    graphCtx.drawImage(blockImage, frame.timestamp * tsX, 0);
-                                    graphCtx.fillStyle = 'white';
-                                    graphCtx.fillRect(frame.timestamp * tsX, ((rot+2048)%4096)/4096*128, Math.max(1,frame.duration*tsX), 1);
                                     return renderFrame;
                                 })]);
                                 return;
@@ -327,75 +358,98 @@
                 });
             }
 
-            const resetGraph = function () {
-                let graphCtx = thrGraph.getContext('2d');
-                graphCtx.clearRect(0,0,config.outputDim/2,128);
-                graphCtx.fillStyle = 'red';
-                graphCtx.fillRect(0, 127 - config.threshold, config.outputDim/2, 1);
-                rotGraph.getContext('2d').clearRect(0,0,config.outputDim/2,128);
-            };
-
             const updatePreview = async function () {
                 config = getParameters();
-                resetGraph();
+                if (!previewFrame) return;
 
-                const previewTimestamps = Array.from({length: config.previews * config.previews},
-                    (_, n) => (videoDurationUs - config.trimStart - config.trimEnd) / (config.previews * config.previews - 1) * n + config.trimStart);
+                const outputDim = config.outputDim;
+                let previewCtx = previewCanvas.getContext('2d');
+                previewCanvas.width = previewCanvas.height = config.outputDim / 2;
+                previewCtx.fillStyle = '#665577';
+                previewCtx.fillRect(0, 0, outputDim, outputDim);
 
-                let previewCtx, outputDim;
-                let previewIndex = 0;
-                for (const ts of previewTimestamps) {
-                    const [tslo, tshi] = libav.f64toi64(ts);
-                    await libav.avformat_seek_file_max(inCtx, -1, tslo, tshi, 0);
-                    while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
-                        const avPkt = await libav.ff_copyout_packet(avpPkt);
-                        if (avPkt.stream_index !== ivStream.index) continue;
-                        let evc = LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream);
-                        vDec.decode(evc);
-                        await libav.av_packet_unref(avpPkt);
-                        if (vDec.decodeQueueSize > 2)
-                            await delay(evc.duration * vDec.decodeQueueSize / 2000);
+                if (currentStep < ALL_STEPS.RING) {
+                    let visibleSize = Math.ceil(config.blockSize / 2) * 4;
+                    const scaleFactor = Math.min(Math.floor((outputDim - 4) / 4 / visibleSize), 4);
+                    visibleSize = Math.max(visibleSize, Math.floor((outputDim - 4) / 16 / scaleFactor) * 4);
+                    const imageOption = {
+                        resizeQuality: "pixelated",
+                        resizeWidth: visibleSize * scaleFactor, resizeHeight: visibleSize * scaleFactor
+                    };
 
-                        if (videoFrames.length) {
-                            prevRot = 0;
-                            const frame = videoFrames.shift();
-                            document.getElementById('status').innerText = `Rendering ${(frame.timestamp/1000000).toFixed(2)}/${(videoDurationUs/1000000).toFixed(2)}`;
-                            if (frame.timestamp + frame.duration <= ts) {
-                                frame.close();
-                                continue;
-                            }
+                    const sourceLeft = Math.max(config.cropL - visibleSize / 4, 0);
+                    const sourceTop = Math.max(config.cropT - visibleSize / 4, 0);
+                    const sourceRight = previewFrame.width - Math.max(config.cropR - visibleSize / 4, 0) - visibleSize;
+                    const sourceBottom = previewFrame.height - Math.max(config.cropB - visibleSize / 4, 0) - visibleSize;
+                    const previewRight = previewCanvas.width - visibleSize * scaleFactor;
 
-                            const process = (await processFrame(frame))[0].then((function(previewIndex) {
-                                return previewFrame => {
-                                    if (!previewCtx) {
-                                        outputDim = config.outputDim;
-                                        previewCtx = videoPreview.getContext('2d');
-                                        previewCtx.clearRect(0, 0, outputDim, outputDim);
-                                        previewCtx.fillStyle = '#665577';
-                                        previewCtx.fillRect(0, 0, outputDim, outputDim);
-                                    }
+                    const topLeft = createImageBitmap(previewFrame, sourceLeft, sourceTop, visibleSize, visibleSize, imageOption);
+                    const topRight = createImageBitmap(previewFrame, sourceRight, sourceTop, visibleSize, visibleSize, imageOption);
+                    const bottomLeft = createImageBitmap(previewFrame, sourceLeft, sourceBottom, visibleSize, visibleSize, imageOption);
+                    const bottomRight = createImageBitmap(previewFrame, sourceRight, sourceBottom, visibleSize, visibleSize, imageOption);
 
-                                    previewCtx.drawImage(previewFrame, 0, 0, outputDim, outputDim,
-                                        (previewIndex % config.previews) * outputDim / 2 / config.previews,
-                                        Math.floor(previewIndex / config.previews) * outputDim / 2 / config.previews,
-                                        outputDim / 2 / config.previews, outputDim / 2 / config.previews
-                                    );
-                                }
-                            })(previewIndex++));
+                    previewCtx.drawImage(await topLeft, 0, 0);
+                    previewCtx.drawImage(await topRight, previewRight, 0);
+                    previewCtx.drawImage(await bottomLeft, 0, previewRight);
+                    previewCtx.drawImage(await bottomRight, previewRight, previewRight);
 
-                            await vDec.flush();
-                            if (ts === previewTimestamps.at(-1))
-                                await process;
+                    previewCtx.fillStyle = 'red';
+                    previewCtx.fillRect((config.cropL - sourceLeft) * scaleFactor, 0, 1, previewCanvas.height);
+                    previewCtx.fillRect(0, (config.cropT - sourceTop) * scaleFactor, previewCanvas.width, 1);
+                    previewCtx.fillRect(previewCanvas.width - 1 - (config.cropR - Math.max(config.cropR - visibleSize / 4, 0)) * scaleFactor, 0, 1, previewCanvas.height);
+                    previewCtx.fillRect(0, previewCanvas.height - 1 - (config.cropB - Math.max(config.cropB - visibleSize / 4, 0)) * scaleFactor, previewCanvas.width, 1);
+                    previewCtx.fillStyle = 'green';
+                    previewCtx.fillRect((config.cropL - sourceLeft + config.blockSize) * scaleFactor, 0, 1, previewCanvas.height);
+                    previewCtx.fillRect(0, (config.cropT - sourceTop + config.blockSize) * scaleFactor, previewCanvas.width, 1);
+                    previewCtx.fillRect(previewCanvas.width - 1 - (config.cropR + config.blockSize - Math.max(config.cropR - visibleSize / 4, 0)) * scaleFactor, 0, 1, previewCanvas.height);
+                    previewCtx.fillRect(0, previewCanvas.height - 1 - (config.cropB + config.blockSize - Math.max(config.cropB - visibleSize / 4, 0)) * scaleFactor, previewCanvas.width, 1);
+                } else {
+                    prevRot = 0;
+                    const processedFrame = await ((await processFrame(await createImageBitmap(previewFrame)))[0]);
+                    previewCtx.drawImage(processedFrame,
+                        0, 0, processedFrame.width, processedFrame.height,
+                        0, 0, previewCanvas.width, previewCanvas.height
+                    );
+                    previewCtx.drawImage(processedFrame, 0, 0, outputDim, outputDim,
+                        0, 0, outputDim / 2, outputDim / 2
+                    );
+                }
+            };
 
-                            break;
-                        }
-                    }
+            const goToStep = function (n) {
+                currentStep = n;
+                document.getElementById('status').textContent = '';
+                document.getElementById('seekControl').style.display = n ? 'block' : 'none';
+                document.getElementById('stepControl').style.display = n ? 'block' : 'none';
+                for (const div of document.querySelectorAll('div[data-step]'))
+                    div.style.display = (n === ALL_STEPS[div.dataset.step]) ? 'block' : 'none';
+
+                switch(n) {
+                    case ALL_STEPS.OUTPUT:
+                        encodeVideo();
+                        document.getElementById('seekControl').style.display = 'none';
+                        document.getElementById('stepControl').style.display = 'none';
+                        return;
+                    case ALL_STEPS.RING:
+                        let frameWidth = previewFrame.width - config.cropL - config.cropR;
+                        let frameHeight = previewFrame.height - config.cropT - config.cropB;
+                        if (frameHeight > frameWidth) [frameHeight, frameWidth] = [frameWidth, frameHeight];
+                        const ringRadius = (frameWidth * 3 / frameHeight > 7) ? frameWidth / 7 * 3 : frameHeight;
+                        document.getElementById('ringRadius').max = frameWidth;
+                        document.getElementById('ringRadius').value = Math.floor(ringRadius * 1.5575 / 2);
+                        document.getElementById('ringStroke').value = Math.floor(3 * ringRadius / 328 - 46 / 41);
+                        break;
+                    case ALL_STEPS.TRIM:
+                        document.getElementById('trimEnd').value = Math.floor(videoDurationUs / 100000) / 10 - 2;
+                        break;
+                    case ALL_STEPS.CODEC:
+                        updateCodecs();
+                        break;
                 }
 
-                videoFrames.forEach(f => f.close());
-                videoFrames.length = 0;
-                document.getElementById('status').innerText = 'OK';
-            };
+                if (n)
+                    updatePreview();
+            }
 
             const findCodecs = async function (w, h, fps) {
                 w = Math.ceil(w/16)*16;
@@ -644,7 +698,7 @@
                     votes[crop]++;
                 };
 
-                await libav.avformat_seek_file_max(inCtx, -1, 0, 0, 0);
+                await libav.avformat_seek_file_approx(inCtx, -1, 0, 0, 0);
                 while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
                     const avPkt = await libav.ff_copyout_packet(avpPkt);
                     if (avPkt.stream_index !== ivStream.index) continue;
@@ -653,7 +707,7 @@
 
                     while (videoFrames.length) {
                         const frame = videoFrames.shift();
-                        document.getElementById('status').innerText = `Analyzing ${(frame.timestamp/1000000).toFixed(2)}/${(videoDurationUs/1000000).toFixed(2)}`;
+                        document.getElementById('status').textContent = `Analyzing ${(frame.timestamp/1000000).toFixed(2)}/${(videoDurationUs/1000000).toFixed(2)}`;
 
                         frames++;
                         fbContext.drawImage(frame, 0, 0);
@@ -668,13 +722,13 @@
                             case 33: {
                                 await vDec.flush();
                                 const [tslo, tshi] = libav.f64toi64(videoDurationUs * 0.45);
-                                await libav.avformat_seek_file_max(inCtx, -1, tslo, tshi, 0);
+                                await libav.avformat_seek_file_approx(inCtx, -1, tslo, tshi, 0);
                                 break;
                             }
                             case 66: {
                                 await vDec.flush();
                                 const [tslo, tshi] = libav.f64toi64(videoDurationUs * 0.9);
-                                await libav.avformat_seek_file_max(inCtx, -1, tslo, tshi, 0);
+                                await libav.avformat_seek_file_approx(inCtx, -1, tslo, tshi, 0);
                                 break;
                             }
                             case 99: {
@@ -707,8 +761,8 @@
                 const frameBuffer = new OffscreenCanvas(lim+5, lim+5);
                 const fbCtx = frameBuffer.getContext('2d', {willReadFrequently: true});
 
-                const [tslo, tshi] = libav.f64toi64(videoDurationUs / 8);
-                await libav.avformat_seek_file_max(inCtx, -1, tslo, tshi, 0);
+                const seekLoHi = libav.f64toi64(videoDurationUs / 8);
+                await libav.avformat_seek_file_max(inCtx, -1, seekLoHi[0], seekLoHi[1], 0);
                 while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
                     const avPkt = await libav.ff_copyout_packet(avpPkt);
                     if (avPkt.stream_index !== ivStream.index) continue;
@@ -720,7 +774,7 @@
 
                     while (videoFrames.length) {
                         const frame = videoFrames.shift();
-                        document.getElementById('status').innerText = `Analyzing ${(frame.timestamp/1000000).toFixed(2)}/${(videoDurationUs/1000000).toFixed(2)}`;
+                        document.getElementById('status').textContent = `Analyzing ${(frame.timestamp/1000000).toFixed(2)}/${(videoDurationUs/1000000).toFixed(2)}`;
 
                         fbCtx.drawImage(frame, config.cropL, config.cropT, frameBuffer.width, frameBuffer.height, 0, 0, frameBuffer.width, frameBuffer.height);
                         const data = fbCtx.getImageData(2, 2, 4, 4);
@@ -762,6 +816,8 @@
             }
 
             document.getElementById('inputFile').onchange = async function () {
+                document.getElementById('status').textContent = 'Loading';
+
                 if (inCtx) {
                     await libav.avformat_close_input_js(inCtx);
                     inCtx = null;
@@ -775,7 +831,6 @@
                 if (currentFile)
                     await libav.unlink(currentFile.name);
 
-                document.getElementById('status').innerText = 'Loading';
                 currentFile = document.getElementById('inputFile').files[0];
                 await libav.mkblockreaderdev(currentFile.name, currentFile.size);
                 let inStreams;
@@ -785,8 +840,8 @@
                 totalFrames = Number(new BigUint64Array((await libav.copyout_u8(ivStream.ptr+48, 8)).buffer)[0]);
                 videoDurationUs = ivStream.duration_time_base * ivStream.time_base_num * 1000000 / ivStream.time_base_den;
 
-                document.getElementById('trimStart').max = document.getElementById('trimEnd').max =
-                    Math.floor(videoDurationUs / 1000000);
+                document.getElementById('trimStart').max = document.getElementById('trimEnd').max = document.getElementById('seekPosition').max = Math.floor(videoDurationUs / 100000) / 10;
+                document.getElementById('seekPosition').value = Math.floor(videoDurationUs / 2000000);
 
                 ivConfig = await LibAVWebCodecsBridge.videoStreamToConfig(libav, ivStream);
                 vDec = new VideoDecoder({
@@ -809,37 +864,96 @@
                     },
                 });
                 vDec.configure(await LibAVWebCodecsBridge.videoStreamToConfig(libav, ivStream));
+                document.getElementById('seekPosition').dispatchEvent(new Event("change"));
+
+                goToStep(1);
+            };
+
+            document.getElementById('seekPosition').addEventListener('change', async function () {
+                while (videoFrames.length)
+                    videoFrames.pop().close();
+
+                const seekPos = parseFloat(this.value) * 1000000;
+                const seekLoHi = libav.f64toi64(seekPos);
+                this.previousValue ??= 0;
+
+                await seekLock.acquire();
+                try {
+                    let ec;
+                    if (this.value > this.previousValue && (videoDurationUs - seekPos) > 2000000) {
+                        ec = await libav.avformat_seek_file_min(inCtx, -1, seekLoHi[0], seekLoHi[1], 0);
+                    } else if (this.value < this.previousValue) {
+                        ec = await libav.avformat_seek_file_max(inCtx, -1, seekLoHi[0], seekLoHi[1], 0);
+                    } else {
+                        ec = await libav.avformat_seek_file_approx(inCtx, -1, seekLoHi[0], seekLoHi[1], 0);
+                    }
+
+                    if (ec)
+                        await libav.avformat_seek_file_max(inCtx, -1, seekLoHi[0], seekLoHi[1], 0);
+
+                    do {
+                        while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
+                            const avPkt = await libav.ff_copyout_packet(avpPkt);
+                            if (avPkt.stream_index !== ivStream.index) continue;
+                            let evc = LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream);
+                            vDec.decode(evc);
+                            await libav.av_packet_unref(avpPkt);
+                            if (vDec.decodeQueueSize > 2)
+                                await delay(evc.duration * vDec.decodeQueueSize / 2000);
+
+                            if (videoFrames.length) {
+                                break;
+                            }
+                        }
+
+                        seekLoHi[0]--;
+                        await libav.avformat_seek_file_max(inCtx, -1, seekLoHi[0], seekLoHi[1], 0);
+                    } while(!videoFrames.length);
+
+                    await vDec.flush();
+                } finally {
+                    seekLock.release();
+                }
+
+                await delay(0);
+                if (videoFrames.length) {
+                    let closestFrame = videoFrames[0];
+                    let closestDelta = Math.abs(closestFrame.timestamp / 1000000 - this.value);
+                    for (const frame of videoFrames) {
+                        const delta = Math.abs(frame.timestamp / 1000000 - this.value);
+                        if (delta < closestDelta) {
+                            closestFrame = frame;
+                            closestDelta = delta;
+                        }
+                    }
+
+                    previewFrame = await createImageBitmap(closestFrame);
+                    this.value = Math.round(closestFrame.timestamp / 100000) / 10;
+                    document.getElementById('seekTimestamp').textContent = this.value;
+                    this.previousValue = this.value;
+
+                    while (videoFrames.length)
+                        videoFrames.pop().close();
+                }
 
                 await updatePreview();
-                await updateCodecs();
-            };
+            });
 
             document.getElementById('analyzeBtn').onclick = async function () {
                 peakFramerate = 0;
                 config = getParameters();
 
-                document.getElementById('status').innerText = 'Analyzing';
+                document.getElementById('status').textContent = 'Analyzing';
                 await estimateCrop(ivConfig.codedWidth, ivConfig.codedHeight);
                 await estimateBlockSize(Math.floor(Math.max(ivConfig.codedWidth, ivConfig.codedHeight) / 100));
-
-                const frame = videoFrames.shift();
-                let frameWidth = frame.displayWidth - config.cropL - config.cropR;
-                let frameHeight = frame.displayHeight - config.cropT - config.cropB;
-                if (frameHeight > frameWidth) [frameHeight, frameWidth] = [frameWidth, frameHeight];
-                const circleHeight = (frameWidth / frameHeight > 2.3333333333) ? frameWidth / 2.3333333333 : frameHeight;
-                document.getElementById('circleRadius').max = frameWidth;
-                document.getElementById('circleRadius').value = Math.floor(circleHeight * 1.5574 / 2);
-                document.getElementById('circleStroke').value = Math.floor(3 / 328 * circleHeight - 46 / 41);
-
-                frame.close();
                 while (videoFrames.length)
                     videoFrames.pop().close();
 
                 await updatePreview();
-                await updateCodecs();
+                document.getElementById('status').textContent = '';
             };
 
-            document.getElementById('encodeBtn').onclick = async function () {
+            const encodeVideo = async function () {
                 config = getParameters()
                 /** @type {[EncodedVideoChunk, EncodedVideoChunkMetadata][]} */
                 const encodedChunks = [];
@@ -849,7 +963,7 @@
                     bitrate: config.outputBitrate/10, width: config.outputDim, height: config.outputDim
                 };
 
-                document.getElementById('status').innerText = 'Loading';
+                document.getElementById('status').textContent = 'Loading';
                 if (!(await VideoEncoder.isConfigSupported(outputConfig)).supported) {
                     return;
                 }
@@ -972,8 +1086,8 @@
                         if (frame.timestamp >= config.trimStart && realTrimUs < 0)
                             realTrimUs = frame.timestamp;
 
-                        document.getElementById('status').innerText = `${((frame.timestamp+frame.duration)/1000000).toFixed(2)} / ${(videoDurationUs/1000000).toFixed(2)}`;
-                        if (frame.timestamp < realTrimUs || frame.timestamp >= (videoDurationUs - config.trimEnd)) {
+                        document.getElementById('status').textContent = `${((frame.timestamp+frame.duration)/1000000).toFixed(2)} / ${(videoDurationUs/1000000).toFixed(2)}`;
+                        if (frame.timestamp < realTrimUs || frame.timestamp >= config.trimEnd) {
                             frame.close();
                             continue;
                         }
@@ -990,11 +1104,11 @@
                             vEnc.encode(vFrame, {keyFrame: keyFrame});
                             vFrame.close();
 
-                            const previewCtx = videoPreview.getContext('2d');
-                            previewCtx.clearRect(0, 0, videoPreview.width, videoPreview.height);
+                            const previewCtx = previewCanvas.getContext('2d');
+                            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
                             previewCtx.drawImage(renderFrame,
                                 0, 0, renderFrame.width, renderFrame.height,
-                                0, 0, videoPreview.width, videoPreview.height
+                                0, 0, previewCanvas.width, previewCanvas.height
                             );
                         }));
                     }
@@ -1036,7 +1150,7 @@
                         const avPkt = await libav.ff_copyout_packet(avpPkt);
                         if (avPkt.stream_index === iaStream?.index) {
                             const framePtsUs = avPkt.pts * iaStream.time_base_num * 1000000 / iaStream.time_base_den;
-                            if (framePtsUs > (videoDurationUs - config.trimEnd))
+                            if (framePtsUs > config.trimEnd)
                                 audioEnd = true;
 
                             if (framePtsUs >= realTrimUs && !audioEnd) {
@@ -1060,7 +1174,7 @@
                             }
                         } else if (avPkt.stream_index === ivStream.index) {
                             const framePtsUs = avPkt.pts * ivStream.time_base_num * 1000000 / ivStream.time_base_den;
-                            if (framePtsUs > (videoDurationUs - config.trimEnd)) {
+                            if (framePtsUs > config.trimEnd) {
                                 videoEnd = true;
                             } else {
                                 vDec.decode(LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream));
@@ -1088,9 +1202,12 @@
                     await vEnc.flush();
                     await drainEvcQueue();
                 } finally {
-                    await libav.av_write_trailer(outCtx);
-                    await libav.avio_close(outAvIo);
-                    await libav.avformat_free_context(outCtx);
+                    if (typeof outCtx === "number" && typeof outAvIo === "number") {
+                        await libav.av_write_trailer(outCtx);
+                        await libav.avio_close(outAvIo);
+                        await libav.avformat_free_context(outCtx);
+                    }
+
                     vEnc.close();
                     await wakeLock?.release();
                 }
@@ -1110,7 +1227,7 @@
                 outputUrl = URL.createObjectURL(outputBlob);
                 document.getElementById('download').href = outputUrl;
                 document.getElementById('download').setAttribute('download', outputFile);
-                document.getElementById('status').innerText = 'OK';
+                document.getElementById('status').textContent = 'OK';
             };
 
             for (const cfgOption of document.querySelectorAll('div.realtime-update input, div.realtime-update select')) {
@@ -1122,66 +1239,75 @@
                 await updatePreview();
                 await updateCodecs();
             };
+
+            document.getElementById('btnNextStep').onclick = function() {
+                goToStep(currentStep + 1);
+            }
         };
     </script>
 </head>
 <body>
 
 <div><canvas id="preview"></canvas></div>
-<hr>
-<div><canvas id="rotGraph" height="130"></canvas></div>
-<hr>
-<div><canvas id="thrGraph" height="130"></canvas></div>
+<p id="seekControl" style="display: none"><label for="seekPosition">视频定位</label><input type="range" id="seekPosition" min="0" value="0" step="0.1" /><span id="seekTimestamp">0</span></p>
+
 <hr>
 
-<div id="status">&nbsp;</div>
+<div id="status" style="height: 2em">&nbsp;</div>
 
-<div>
+<div data-step="FILE">
     <input type="file" id="inputFile" accept=".ogv,.mkv,.webm,.mp4" />
-    <button id="analyzeBtn">自动裁切</button>
 </div>
 
-<div class="realtime-update">
-    <label for="trimStart">裁剪开头</label><input type="number" id="trimStart" min="0" max="6" step="0.05" value="2"/>s
-    <label for="trimEnd">结尾</label><input type="number" id="trimEnd" min="0" max="6" step="0.05" value="2"/>s
+<div class="realtime-update" data-step="ORIENTATION" style="display: none">
     <label for="orientation">输入朝向</label>
     <select id="orientation">
         <option value="0,1,2,3,0" id="oUpright" selected>正向</option>
     </select>
 </div>
 
-<div class="realtime-update">
-    <label for="cropL">裁切左</label><input type="number" id="cropL" min="0" max="99" step="1" value="0"/>px
+<div class="realtime-update" data-step="CROP" style="display: none">
+    <p><span id="cropInstruction">调整裁切使红色线对齐画面边缘，或者使用</span><button type="button" id="analyzeBtn">自动裁切</button></p>
+    <label for="cropL">左</label><input type="number" id="cropL" min="0" max="99" step="1" value="0"/>px
     <label for="cropT">上</label><input type="number" id="cropT" min="0" max="99" step="1" value="0"/>px
+    <br>
     <label for="cropR">右</label><input type="number" id="cropR" min="0" max="99" step="1" value="0"/>px
     <label for="cropB">下</label><input type="number" id="cropB" min="0" max="99" step="1" value="0"/>px
 </div>
 
-<div class="realtime-update">
-    <label for="threshold">色块阈值</label><input type="number" id="threshold" min="0" max="127" step="1" value="63"/>
-    <label for="blockSize">色块大小</label><input type="number" id="blockSize" min="1" max="32" step="1" value="8"/>px
+<div class="realtime-update" data-step="CODE_BLOCK" style="display: none">
+    <p id="blockSizeInstruction">调整大小使色块被红绿线包住，建议定位到有白色或黄色色块的时间操作</p>
+    <label for="blockSize">大小</label><input type="number" id="blockSize" min="1" max="32" step="1" value="8"/>px
+    <label for="threshold">阈值</label><input type="number" id="threshold" min="0" max="127" step="1" value="63"/>
 </div>
 
-<div class="realtime-update">
-    <label for="circleRadius">圆环半径</label><input type="number" id="circleRadius" min="0" max="3000" step="1" value="0"/>px
-    <label for="circleStroke">圆环粗细</label><input type="number" id="circleStroke" min="1" max="32" step="1" value="8"/>px
+<div class="realtime-update" data-step="RING" style="display: none">
+    <p id="backgroundRingInstruction">配置背景圆环，若要隐藏可在半径选项中填0</p>
+    <label for="ringRadius">半径</label><input type="number" id="ringRadius" min="0" max="3000" step="1" value="0"/>px
+    <label for="ringStroke">粗细</label><input type="number" id="ringStroke" min="1" max="32" step="1" value="8"/>px
 </div>
 
-<div class="realtime-update">
-    <label for="previews">预览数量</label><input type="number" id="previews" min="2" max="9" step="1" value="3"/>
+<div data-step="TRIM" style="display: none">
+    <p id="videoTrimInstruction">视频裁剪</p>
+    <label for="trimStart">开头</label><input type="number" id="trimStart" min="0" max="6" step="0.1" value="2"/>s
+    <label for="trimEnd">结尾</label><input type="number" id="trimEnd" min="0" max="6" step="0.1" value="2"/>s
 </div>
 
-<div>
-    <label for="outputDim">输出分辨率</label><input type="number" id="outputDim" min="160" max="5968" step="16" value="1600"/>
+<div data-step="CODEC" style="display: none">
+    <label for="outputDim">分辨率</label><input type="number" id="outputDim" min="160" max="5968" step="16" value="1088"/>
     <label for="outputBitrate">码率</label><input type="number" id="outputBitrate" min="1" max="50" step="0.1" value="10"/>Mbps
+    <br>
+    <label for="outputCodec">编码</label><select id="outputCodec"></select>
+    <br>
+    <label for="keyInterval">关键帧间隔</label><input type="number" id="keyInterval" min="-1" max="10" step="1" value="10"/>s
+    <p id="encodeReadyMsg">点击下一步开始编码</p>
 </div>
 
-<div>
-    <label for="outputCodec">输出编码</label><select id="outputCodec"></select>
-    <label for="keyInterval">关键帧间隔</label><input type="number" id="keyInterval" min="-1" max="10" step="1" value="10"/>s
-    <button id="encodeBtn">编码</button>
-    <a id="download">下载</a>
+<div data-step="OUTPUT" style="display: none">
+    <span id="encodingMsg">编码中，请耐心等待，不要关闭网页。编码完成后可点击链接</span><a id="download">下载</a>
 </div>
+
+<p id="stepControl" style="display: none"><button type="button" id="btnNextStep">下一步</button></p>
 
 <hr>
 
@@ -1189,7 +1315,5 @@
 <div id="credit2">此工具处理均在设备本地进行，不会上传任何数据。</div>
 <div id="credit3">使用<a href="https://github.com/Yahweasel/libav.js">libav</a>.<a href="https://github.com/Yahweasel/libavjs-webcodecs-bridge">js</a>打造</div>
 
-<script>
-</script>
 </body>
 </html>

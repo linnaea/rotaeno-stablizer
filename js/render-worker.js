@@ -59,11 +59,11 @@
         renderCtx.scale(scale, scale);
         renderCtx.rotate(-Math.PI * 2 * (rot + config.orientation[4]) / 4096);
 
-        if (config.circleStroke && config.circleRadius) {
+        if (config.ringStroke && config.ringRadius) {
             renderCtx.strokeStyle = 'white';
-            renderCtx.lineWidth = config.circleStroke;
+            renderCtx.lineWidth = config.ringStroke;
             renderCtx.beginPath();
-            renderCtx.ellipse(0,0,config.circleRadius,config.circleRadius,0,0,Math.PI*2);
+            renderCtx.ellipse(0,0,config.ringRadius,config.ringRadius,0,0,Math.PI*2);
             renderCtx.stroke();
         }
 
