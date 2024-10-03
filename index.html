@@ -121,19 +121,9 @@
             if (failedChecks.length)
                 alert(translation.compatabilityWarning + ' ' + failedChecks.join(', '));
 
-            /** @type LibAV */
-            let libav;
-            try {
-                libav = await LibAV.LibAV({noworker: true});
-            } catch {
-                libav = await LibAV.LibAV({noworker: true, nowasm: true});
-            }
-
-            /** @typedef PtrAVPacket number */
-            /** @type PtrAVPacket */
-            const avpPkt = await libav.av_packet_alloc();
-            /** @type PtrAVPacket */
-            const avpPktW = await libav.av_packet_alloc();
+            const libav = await LibAV.LibAV({noworker: true, nowasm: true});
+            const avpPkt = libav.av_packet_alloc_sync();
+            const avpPktW = libav.av_packet_alloc_sync();
 
             /** @type HTMLCanvasElement */
             const previewCanvas = document.getElementById('preview');
@@ -643,7 +633,7 @@
                     for (const level of supportedLevels) {
                         for (const config of configs) {
                             const codecStr = p[codec].format(level, ...config);
-                            if((await VideoEncoder.isConfigSupported({codec: codecStr, width: w, height: h})).supported) {
+                            if((await VideoEncoder.isConfigSupported({codec: codecStr, width: w, height: h, framerate: 30, bitrateMode: 'variable'})).supported) {
                                 supportedConfigs.push(codecStr);
                             }
                         }
@@ -700,10 +690,10 @@
 
                 await libav.avformat_seek_file_approx(inCtx, -1, 0, 0, 0);
                 while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
-                    const avPkt = await libav.ff_copyout_packet(avpPkt);
+                    const avPkt = libav.ff_copyout_packet_sync(avpPkt);
                     if (avPkt.stream_index !== ivStream.index) continue;
                     vDec.decode(LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream));
-                    await libav.av_packet_unref(avpPkt);
+                    libav.av_packet_unref_sync(avpPkt);
 
                     while (videoFrames.length) {
                         const frame = videoFrames.shift();
@@ -764,11 +754,11 @@
                 const seekLoHi = libav.f64toi64(videoDurationUs / 8);
                 await libav.avformat_seek_file_max(inCtx, -1, seekLoHi[0], seekLoHi[1], 0);
                 while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
-                    const avPkt = await libav.ff_copyout_packet(avpPkt);
+                    const avPkt = libav.ff_copyout_packet_sync(avpPkt);
                     if (avPkt.stream_index !== ivStream.index) continue;
                     let evc = LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream);
                     vDec.decode(evc);
-                    await libav.av_packet_unref(avpPkt);
+                    libav.av_packet_unref_sync(avpPkt);
                     if (vDec.decodeQueueSize > 2)
                         await delay(evc.duration * vDec.decodeQueueSize / 2000);
 
@@ -819,7 +809,7 @@
                 document.getElementById('status').textContent = 'Loading';
 
                 if (inCtx) {
-                    await libav.avformat_close_input_js(inCtx);
+                    libav.avformat_close_input_js_sync(inCtx);
                     inCtx = null;
                 }
 
@@ -829,15 +819,15 @@
                 }
 
                 if (currentFile)
-                    await libav.unlink(currentFile.name);
+                    libav.unlink_sync(currentFile.name);
 
                 currentFile = document.getElementById('inputFile').files[0];
-                await libav.mkblockreaderdev(currentFile.name, currentFile.size);
+                libav.mkblockreaderdev_sync(currentFile.name, currentFile.size);
                 let inStreams;
                 [inCtx, inStreams] = await libav.ff_init_demuxer_file(currentFile.name);
                 ivStream = inStreams.filter(x => x.codec_type === LibAV.AVMEDIA_TYPE_VIDEO)[0];
                 iaStream = inStreams.filter(x => x.codec_type === LibAV.AVMEDIA_TYPE_AUDIO)[0];
-                totalFrames = Number(new BigUint64Array((await libav.copyout_u8(ivStream.ptr+48, 8)).buffer)[0]);
+                totalFrames = Number(new BigUint64Array((libav.copyout_u8_sync(ivStream.ptr+48, 8)).buffer)[0]);
                 videoDurationUs = ivStream.duration_time_base * ivStream.time_base_num * 1000000 / ivStream.time_base_den;
 
                 document.getElementById('trimStart').max = document.getElementById('trimEnd').max = document.getElementById('seekPosition').max = Math.floor(videoDurationUs / 100000) / 10;
@@ -893,11 +883,11 @@
 
                     do {
                         while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
-                            const avPkt = await libav.ff_copyout_packet(avpPkt);
+                            const avPkt = libav.ff_copyout_packet_sync(avpPkt);
                             if (avPkt.stream_index !== ivStream.index) continue;
                             let evc = LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream);
                             vDec.decode(evc);
-                            await libav.av_packet_unref(avpPkt);
+                            libav.av_packet_unref_sync(avpPkt);
                             if (vDec.decodeQueueSize > 2)
                                 await delay(evc.duration * vDec.decodeQueueSize / 2000);
 
@@ -959,8 +949,9 @@
                 const encodedChunks = [];
                 const outputConfig = {
                     codec: document.getElementById('outputCodec').value,
-                    bitrateMode: 'variable', contentHint: 'motion', framerate: totalFrames * 1000000 / videoDurationUs/10,
-                    bitrate: config.outputBitrate/10, width: config.outputDim, height: config.outputDim
+                    bitrateMode: 'variable', contentHint: 'motion', framerate: 30,
+                    bitrate: config.outputBitrate * 30 / (totalFrames * 1000000 / videoDurationUs),
+                    width: config.outputDim, height: config.outputDim
                 };
 
                 document.getElementById('status').textContent = 'Loading';
@@ -975,7 +966,7 @@
                 if (iaStream) {
                     await libav.avformat_seek_file_max(inCtx, -1, seekLoHi[0], seekLoHi[1], 0);
                     while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
-                        const avPkt = await libav.ff_copyout_packet(avpPkt);
+                        const avPkt = libav.ff_copyout_packet_sync(avpPkt);
                         if (avPkt.stream_index === iaStream.index) {
                             const framePtsUs = avPkt.pts * iaStream.time_base_num * 1000000 / iaStream.time_base_den;
                             const frameEndUs = (avPkt.pts + avPkt.duration) * iaStream.time_base_num * 1000000 / iaStream.time_base_den;
@@ -994,7 +985,7 @@
                 vEnc.configure(outputConfig);
 
                 if (outputUrl) URL.revokeObjectURL(outputUrl);
-                if (outputFile) await libav.unlink(outputFile);
+                if (outputFile) libav.unlink_sync(outputFile);
                 outputUrl = null;
                 outputChunks = [];
                 outputFile = new Date().getTime().toString() + '.';
@@ -1068,13 +1059,13 @@
                 /** @type number */ let outCtx;
                 /** @type {number|Packet[]} */ let outAvIo = [];
                 /** @type {[number, number, number][]} */ let oStreams;
-                await libav.mkwriterdev(outputFile);
+                libav.mkwriterdev_sync(outputFile);
 
                 oStreams = [await LibAVWebCodecsBridge.configToVideoStream(libav, outputConfig)];
                 oStreams[0][1] = ivStream.time_base_num; oStreams[0][2] = ivStream.time_base_den;
                 if (iaStream)
                     oStreams.push([iaStream.codecpar, iaStream.time_base_num, iaStream.time_base_den]);
-                await libav.AVCodecParameters_color_range_s(oStreams[0][0], 2); // AVCOL_RANGE_JPEG
+                libav.AVCodecParameters_color_range_s_sync(oStreams[0][0], 2); // AVCOL_RANGE_JPEG
 
                 const startTime = new Date().getTime();
                 let lastKeyFrame = -1;
@@ -1127,13 +1118,13 @@
                             const bufferedPackets = outAvIo;
                             bufferedPackets.push(avPkt);
 
-                            [outCtx, , outAvIo,] = await libav.ff_init_muxer({
+                            [outCtx, , outAvIo,] = libav.ff_init_muxer_sync({
                                 filename: outputFile, open: true, codecpars: true
                             }, oStreams);
-                            await libav.avformat_write_header(outCtx, null);
-                            await libav.ff_write_multi(outCtx, avpPkt, bufferedPackets, true);
+                            libav.avformat_write_header_sync(outCtx, null);
+                            libav.ff_write_multi_sync(outCtx, avpPkt, bufferedPackets, true);
                         } else {
-                            await libav.ff_write_multi(outCtx, avpPkt, [avPkt], true);
+                            libav.ff_write_multi_sync(outCtx, avpPkt, [avPkt], true);
                         }
                     }
                 }
@@ -1147,7 +1138,7 @@
                     }
                     await libav.avformat_seek_file_max(inCtx, -1, seekLoHi[0], seekLoHi[1], 0);
                     while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
-                        const avPkt = await libav.ff_copyout_packet(avpPkt);
+                        const avPkt = libav.ff_copyout_packet_sync(avpPkt);
                         if (avPkt.stream_index === iaStream?.index) {
                             const framePtsUs = avPkt.pts * iaStream.time_base_num * 1000000 / iaStream.time_base_den;
                             if (framePtsUs > config.trimEnd)
@@ -1167,7 +1158,7 @@
                                 avPkt.time_base_num = iaStream.time_base_num;
                                 avPkt.time_base_den = iaStream.time_base_den;
                                 if (typeof outCtx === "number") {
-                                    await libav.ff_write_multi(outCtx, avpPktW, [avPkt], true);
+                                    libav.ff_write_multi_sync(outCtx, avpPktW, [avPkt], true);
                                 } else {
                                     outAvIo.push(avPkt);
                                 }
@@ -1182,7 +1173,7 @@
                             }
                         }
 
-                        await libav.av_packet_unref(avpPkt);
+                        libav.av_packet_unref_sync(avpPkt);
                         lastFrame = (await drainFrameQueue()).at(-1) ?? lastFrame;
                         await drainEvcQueue();
 
@@ -1203,9 +1194,9 @@
                     await drainEvcQueue();
                 } finally {
                     if (typeof outCtx === "number" && typeof outAvIo === "number") {
-                        await libav.av_write_trailer(outCtx);
-                        await libav.avio_close(outAvIo);
-                        await libav.avformat_free_context(outCtx);
+                        libav.av_write_trailer_sync(outCtx);
+                        libav.avio_close_sync(outAvIo);
+                        libav.avformat_free_context_sync(outCtx);
                     }
 
                     vEnc.close();
