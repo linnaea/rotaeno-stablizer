@@ -418,7 +418,15 @@
                         encodeVideo();
                         document.getElementById('seekControl').style.display = 'none';
                         document.getElementById('stepControl').style.display = 'none';
-                        window.Notification?.requestPermission();
+                        try {
+                            if (window.Notification && window.Notification?.permission !== 'granted') {
+                                new Notification('');
+                                Notification.requestPermission();
+                            }
+                        } catch(e) {
+                            if (!(e instanceof TypeError))
+                                Notification.requestPermission();
+                        }
                         return;
                     case ALL_STEPS.RING:
                         let frameWidth = previewFrame.width - config.cropL - config.cropR;
