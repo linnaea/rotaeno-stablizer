@@ -37,17 +37,27 @@
             }).reduce((a, b) => a.map((v, i) => v + b[i]), [0, 0, 0]);
         }).flat(1).map(v => v / blockSize / blockSize);
 
-        const thr = Math.max(...rotPx.map(v => Math.min(v, 255-v)));
+        const stdDiv = Array.from({length:4}, (_, block) => {
+            return Array.from({length: blockSize}, (_, row) => {
+                return Array.from({length: blockSize}, (_, col) => {
+                    const px = row * blockSize * 4 + block * blockSize + col;
+                    const pxDat = blocks.slice(px*4, px*4+3);
+                    return pxDat.map((v, i) => v-rotPx[block*3+i]).map(v => v*v);
+                }).reduce((a, b) => a.map((v, i) => v + b[i]), [0, 0, 0]);
+            }).reduce((a, b) => a.map((v, i) => v + b[i]), [0, 0, 0]);
+        }).flat(1).map(v => Math.sqrt(v / blockSize / blockSize));
+
+        const thr = Math.max(...stdDiv);
         let rot;
-        if (thr > config.threshold) {
+        if (thr > config.sensitivity) {
             if (typeof prevRot === 'number') {
                 rot = prevRot;
             } else {
-                messaging.postMessage([renderId, 0, frame, thr, scale], [frame]);
+                messaging.postMessage([renderId, 0, frame, thr, scale, rotPx], [frame]);
                 return;
             }
         } else {
-            rot = rotPx.map(v => v < 127 ? 0 : 1).reduce((a, b) => a * 2 + b, 0);
+            rot = rotPx.map(v => v < config.threshold ? 0 : 1).reduce((a, b) => a * 2 + b, 0);
         }
 
         const outputDim = config.outputDim;
@@ -77,7 +87,7 @@
 
         const renderFrame = await createImageBitmap(renderCtx.canvas);
         const blockImage = await createImageBitmap(blockCanvasCtx.canvas);
-        messaging.postMessage([renderId, blockImage, renderFrame, thr, rot], [blockImage, renderFrame]);
+        messaging.postMessage([renderId, blockImage, renderFrame, thr, rot, rotPx], [blockImage, renderFrame]);
         frame.close();
     }
 })(self.renderWorkerCompat ?? self);

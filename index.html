@@ -68,6 +68,7 @@
                     cropR: 'Right',
                     cropB: 'Bottom',
                     blockSizeInstruction: 'Adjust size to align the green line with edge of the color blocks.<br>It\'s recommended to seek to a position where one of the blocks is showing yellow or white.',
+                    sensitivity: 'Sensitivity',
                     threshold: 'Threshold',
                     seekPosition: 'Seek',
                     blockSize: 'Size',
@@ -167,6 +168,7 @@
             let config;
             const allParams = {
                 threshold: parseInt,
+                sensitivity: parseInt,
                 blockSize: parseInt,
                 orientation: v => v.split(',').map(n => parseInt(n)),
                 cropL: parseInt,
@@ -250,7 +252,7 @@
             for (let i = 0; i < 6; i++) {
                 let noWorker = false;
                 try {
-                    renderWorkers.push(new Worker('js/render-worker.js'));
+                    renderWorkers.push(new Worker('js/render-worker.js?1'));
                 } catch {
                     if (i !== 0) break;
                     noWorker = true;
@@ -293,7 +295,8 @@
                                 prevRot = rot;
                                 if(renderId !== renderIds.shift()) throw null;
                                 const [, resolve] = renderQueue.shift();
-                                resolve([success, renderFrame, thr, rot]);
+                                ev.data.shift();
+                                resolve(ev.data);
                             });
                         }
                     };
@@ -331,7 +334,23 @@
                                 renderWorkers[i].postMessage([renderId, config, frame, scale, null], [frame]);
                                 renderBusy[i] = true;
 
-                                resolve([renderCb[0].then(v => v[1])]);
+                                resolve([renderCb[0].then(v => {
+                                    const [blockImage, renderFrame] = v;
+                                    // let graphCtx;
+                                    // const outputDim = config.outputDim;
+                                    // const tsX = outputDim / 2 / videoDurationUs;
+                                    // graphCtx = document.getElementById('thrGraph').getContext('2d');
+                                    // graphCtx.fillStyle = 'white';
+                                    // graphCtx.drawImage(blockImage, frame.timestamp * tsX, 0);
+                                    // graphCtx.fillRect(frame.timestamp * tsX, 127-thr, Math.max(1,frame.duration*tsX), 1);
+                                    // graphCtx = document.getElementById('rotGraph').getContext('2d');
+                                    // graphCtx.fillStyle = 'white';
+                                    // for (const v of pval) {
+                                    //     graphCtx.fillRect(frame.timestamp * tsX, 128-v/2, Math.max(1,frame.duration*tsX), 1);
+                                    // }
+                                    blockImage.close();
+                                    return renderFrame;
+                                })]);
                                 return;
                             }
                         }
@@ -354,6 +373,7 @@
                 const outputDim = config.outputDim;
                 let previewCtx = previewCanvas.getContext('2d');
                 previewCanvas.width = previewCanvas.height = config.outputDim / 2;
+                // document.getElementById('thrGraph').width = document.getElementById('rotGraph').width = config.outputDim / 2;
                 previewCtx.fillStyle = '#665577';
                 previewCtx.fillRect(0, 0, outputDim, outputDim);
 
@@ -1261,6 +1281,9 @@
 
 <hr>
 
+<!--<div><canvas id="thrGraph" height="130"></canvas></div>-->
+<!--<div><canvas id="rotGraph" height="130"></canvas></div>-->
+
 <div id="status" style="height: 2em">Loading</div>
 
 <div data-step="FILE" style="display: none">
@@ -1286,7 +1309,9 @@
 <div class="realtime-update" data-step="CODE_BLOCK" style="display: none">
     <p id="blockSizeInstruction">调整大小使色块被红绿线包住，建议定位到有白色或黄色色块的时间操作</p>
     <label for="blockSize">大小</label> <input type="number" id="blockSize" min="1" max="32" step="1" value="8"/>px
-    <label for="threshold">阈值</label> <input type="number" id="threshold" min="0" max="127" step="1" value="63"/>
+    <br>
+    <label for="sensitivity">灵敏度</label> <input type="number" id="sensitivity" min="0" max="127" step="1" value="20"/>
+    <label for="threshold">阈值</label> <input type="number" id="threshold" min="0" max="127" step="1" value="64"/>
 </div>
 
 <div class="realtime-update" data-step="RING" style="display: none">
