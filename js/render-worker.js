@@ -53,7 +53,7 @@
             if (typeof prevRot === 'number') {
                 rot = prevRot;
             } else {
-                messaging.postMessage([renderId, 0, frame, thr, scale, rotPx], [frame]);
+                messaging.postMessage([renderId, 0, frame, thr, scale], [frame]);
                 return;
             }
         } else {
@@ -87,7 +87,7 @@
 
         const renderFrame = await createImageBitmap(renderCtx.canvas);
         const blockImage = await createImageBitmap(blockCanvasCtx.canvas);
-        messaging.postMessage([renderId, blockImage, renderFrame, thr, rot, rotPx], [blockImage, renderFrame]);
+        messaging.postMessage([renderId, blockImage, renderFrame, thr, rot], [blockImage, renderFrame]);
         frame.close();
     }
 })(self.renderWorkerCompat ?? self);

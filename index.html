@@ -254,7 +254,7 @@
             for (let i = 0; i < 6; i++) {
                 let noWorker = false;
                 try {
-                    renderWorkers.push(new Worker('js/render-worker.js?v=$Format:1.%cs.%ct.%h$'));
+                    renderWorkers.push(new Worker('js/render-worker.js?v=$Format:1/%cs/%ct/%h$'));
                 } catch {
                     if (i !== 0) break;
                     noWorker = true;
@@ -268,7 +268,7 @@
                     };
 
                     const renderScript = document.createElement('script');
-                    renderScript.src = 'js/render-worker.js';
+                    renderScript.src = 'js/render-worker.js?v=$Format:1/%cs/%ct/%h$';
                     document.head.appendChild(renderScript);
                     renderWorkers.push(window.renderWorkerCompat.proxy);
                 }
@@ -337,7 +337,7 @@
                                 renderBusy[i] = true;
 
                                 resolve([renderCb[0].then(v => {
-                                    const [blockImage, renderFrame] = v;
+                                    const [blockImage, renderFrame, , rot] = v;
                                     // let graphCtx;
                                     // const outputDim = config.outputDim;
                                     // const tsX = outputDim / 2 / videoDurationUs;
@@ -351,6 +351,7 @@
                                     //     graphCtx.fillRect(frame.timestamp * tsX, 128-v/2, Math.max(1,frame.duration*tsX), 1);
                                     // }
                                     blockImage.close();
+                                    renderFrame['rotationNum'] = rot;
                                     return renderFrame;
                                 })]);
                                 return;
@@ -797,28 +798,22 @@
                         document.getElementById('status').textContent = `Analyzing ${(frame.timestamp/1000000).toFixed(2)}/${(videoDurationUs/1000000).toFixed(2)}`;
 
                         fbCtx.drawImage(frame, config.cropL, config.cropT, frameBuffer.width, frameBuffer.height, 0, 0, frameBuffer.width, frameBuffer.height);
-                        const data = fbCtx.getImageData(2, 2, 4, 4);
+                        const data = fbCtx.getImageData(2, 2, 3, 3);
                         r = Array.from({length: data.height * data.width}, (_, i) => data.data[i * 4]).reduce((a, b) => a + b) / data.height / data.width;
                         g = Array.from({length: data.height * data.width}, (_, i) => data.data[i * 4 + 1]).reduce((a, b) => a + b) / data.height / data.width;
                         b = Array.from({length: data.height * data.width}, (_, i) => data.data[i * 4 + 2]).reduce((a, b) => a + b) / data.height / data.width;
 
+                        frame.close();
                         if (r > 127 && g > 127) {
                             await vDec.flush();
-                            if (videoFrames.length) {
-                                frame.close();
-                            } else {
-                                videoFrames.unshift(frame);
-                            }
                             break;
                         }
-
-                        frame.close();
                     }
 
                     if (r > 127 && g > 127) break;
                 }
 
-                if (r < 128 && g < 128 && b < 128) return;
+                if (r < 128 && g < 128) return;
                 for(; blockSize <= lim; blockSize++) {
                     const data = fbCtx.getImageData(1, 1, blockSize - 1, blockSize - 1);
                     r = Array.from({length: data.height * data.width}, (_, i) => data.data[i*4]).reduce((a,b) => a+b) / data.height / data.width;
@@ -833,6 +828,68 @@
                 }
 
                 document.getElementById('blockSize').value = blockSize;
+            }
+
+            const guessOrientation = async function () {
+                config = getParameters();
+                const seekLoHi = libav.f64toi64(videoDurationUs / 3);
+                let rotationNum = [];
+                await libav.avformat_seek_file_max(inCtx, -1, seekLoHi[0], seekLoHi[1], 0);
+                while ((await libav.av_read_frame(inCtx, avpPkt)) === 0) {
+                    const avPkt = libav.ff_copyout_packet_sync(avpPkt);
+                    if (avPkt.stream_index !== ivStream.index) continue;
+                    let evc = LibAVWebCodecsBridge.packetToEncodedVideoChunk(avPkt, ivStream);
+                    vDec.decode(evc);
+                    libav.av_packet_unref_sync(avpPkt);
+                    if (vDec.decodeQueueSize > 2)
+                        await delay(evc.duration * vDec.decodeQueueSize / 2000);
+
+                    const processTasks = [];
+                    while (videoFrames.length) {
+                        const frame = videoFrames.shift();
+                        document.getElementById('status').textContent = `Analyzing ${(frame.timestamp/1000000).toFixed(2)}/${(videoDurationUs/1000000).toFixed(2)}`;
+                        processTasks.push((await processFrame(frame))[0].then(frame => {
+                            if (rotationNum.length || frame.rotationNum)
+                                rotationNum.push(frame.rotationNum);
+
+                            frame.close();
+                        }));
+                    }
+
+                    await Promise.all(processTasks);
+                    if (rotationNum.length > 127)
+                        break;
+                }
+
+                const votes = [0,0,0,0];
+                rotationNum = rotationNum.map(x => [
+                    Math.floor(x / 512) % 8,
+                    Math.floor(x / 64) % 8,
+                    Math.floor(x / 8) % 8,
+                    Math.floor(x / 1) % 8,
+                ]);
+
+                for(let d = 0; d < 3; d++) {
+                    const vote = Array.from({length: 4}, (_, i) => {
+                        const series = rotationNum.map(x => x[i]);
+                        let e = Array.from({length: 8}).map(() => 0);
+                        series.forEach(x => e[x]++);
+                        e = e.map(x => x ? Math.log2(series.length / x) : 0);
+                        return series.reduce((a, b) => a + e[b], 0) / series.length;
+                    });
+
+                    vote.forEach((v, i) => votes[i] += v * (d ? 2 : 1));
+
+                    rotationNum = rotationNum.map((x, i, a) => {
+                        if (!i) return [0,0,0,0];
+                        return x.map((v, n) => v-a[i-1][n]).map(v => v < 0 ? v + 8: v)
+                    });
+                    rotationNum.shift();
+                }
+
+                const votedOption = votes.indexOf(Math.max(...votes));
+                const options = document.getElementById('orientation').querySelectorAll('option');
+                options.forEach((e, i) => e.selected = i === votedOption);
             }
 
             document.getElementById('inputFile').onchange = async function () {
@@ -966,6 +1023,7 @@
                 document.getElementById('status').textContent = 'Analyzing';
                 await estimateCrop(ivConfig.codedWidth, ivConfig.codedHeight);
                 await estimateBlockSize(Math.floor(Math.max(ivConfig.codedWidth, ivConfig.codedHeight) / 100));
+                await guessOrientation();
                 while (videoFrames.length)
                     videoFrames.pop().close();
 
@@ -1313,8 +1371,8 @@
     <label for="orientation">输入朝向</label>
     <select id="orientation">
         <option value="0,1,2,3,0" id="oUpright" selected>正向</option>
-        <option value="2,0,3,1,1024" id="oRight">朝右</option>
         <option value="1,3,0,2,3072" id="oLeft">朝左</option>
+        <option value="2,0,3,1,1024" id="oRight">朝右</option>
         <option value="3,2,1,0,2048" id="o180">180°</option>
     </select>
 </div>
