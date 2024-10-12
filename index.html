@@ -62,6 +62,8 @@
                     trimEnd: 'End',
                     orientation: 'Orientation',
                     oUpright: 'Upright',
+                    oLeft: 'Left',
+                    oRight: 'Right',
                     cropInstruction: 'Adjust cropping to align the red line with outer edge of game capture, or click ',
                     cropL: 'Left',
                     cropT: 'Top',
@@ -153,9 +155,9 @@
             let currentStep = 0;
             const ALL_STEPS = [
                 'FILE',
-                // 'ORIENTATION',
                 'CROP',
                 'CODE_BLOCK',
+                'ORIENTATION',
                 'RING',
                 'TRIM',
                 'CODEC',
@@ -252,7 +254,7 @@
             for (let i = 0; i < 6; i++) {
                 let noWorker = false;
                 try {
-                    renderWorkers.push(new Worker('js/render-worker.js?1'));
+                    renderWorkers.push(new Worker('js/render-worker.js?v=$Format:1.%cs.%ct.%h$'));
                 } catch {
                     if (i !== 0) break;
                     noWorker = true;
@@ -377,7 +379,7 @@
                 previewCtx.fillStyle = '#665577';
                 previewCtx.fillRect(0, 0, outputDim, outputDim);
 
-                if (currentStep < ALL_STEPS.RING) {
+                if (currentStep <= ALL_STEPS.CODE_BLOCK) {
                     let visibleSize = Math.ceil(config.blockSize / 2) * 4;
                     const scaleFactor = Math.min(Math.floor((outputDim - 4) / 4 / visibleSize), 4);
                     visibleSize = Math.max(visibleSize, Math.floor((outputDim - 4) / 16 / scaleFactor) * 4);
@@ -1290,13 +1292,6 @@
     <input type="file" id="inputFile" accept=".ogv,.mkv,.webm,.mp4" />
 </div>
 
-<div class="realtime-update" data-step="ORIENTATION" style="display: none">
-    <label for="orientation">输入朝向</label>
-    <select id="orientation">
-        <option value="0,1,2,3,0" id="oUpright" selected>正向</option>
-    </select>
-</div>
-
 <div class="realtime-update" data-step="CROP" style="display: none">
     <p><span id="cropInstruction">调整裁切使红色线对齐画面边缘，或者使用</span><button type="button" id="analyzeBtn">自动裁切</button></p>
     <label for="cropL">左</label> <input type="number" id="cropL" min="0" max="99" step="1" value="0"/>px
@@ -1312,6 +1307,16 @@
     <br>
     <label for="sensitivity">灵敏度</label> <input type="number" id="sensitivity" min="0" max="127" step="1" value="20"/>
     <label for="threshold">阈值</label> <input type="number" id="threshold" min="0" max="127" step="1" value="64"/>
+</div>
+
+<div class="realtime-update" data-step="ORIENTATION" style="display: none">
+    <label for="orientation">输入朝向</label>
+    <select id="orientation">
+        <option value="0,1,2,3,0" id="oUpright" selected>正向</option>
+        <option value="2,0,3,1,1024" id="oRight">朝右</option>
+        <option value="1,3,0,2,3072" id="oLeft">朝左</option>
+        <option value="3,2,1,0,2048" id="o180">180°</option>
+    </select>
 </div>
 
 <div class="realtime-update" data-step="RING" style="display: none">
