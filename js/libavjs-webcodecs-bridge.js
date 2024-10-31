@@ -38,20 +38,21 @@
      */
     function audioStreamToConfig$1(libav, stream) {
         return __awaiter$2(this, void 0, void 0, function* () {
-            const codecString = yield libav.avcodec_get_name(stream.codec_id);
+            let codecpar;
+            if (stream.codecpar) {
+                codecpar = yield libav.ff_copyout_codecpar(stream.codecpar);
+            }
+            else {
+                codecpar = stream;
+            }
+            const codecString = yield libav.avcodec_get_name(codecpar.codec_id);
             // Start with the basics
             const ret = {
-                codec: null,
-                sampleRate: yield libav.AVCodecParameters_sample_rate(stream.codecpar),
-                numberOfChannels: yield libav.AVCodecParameters_channels(stream.codecpar)
+                codec: "unknown",
+                sampleRate: codecpar.sample_rate,
+                numberOfChannels: codecpar.channels
             };
-            // Get the extradata
-            const extradataPtr = yield libav.AVCodecParameters_extradata(stream.codecpar);
-            let extradata = null;
-            if (extradataPtr) {
-                const edSize = yield libav.AVCodecParameters_extradata_size(stream.codecpar);
-                extradata = yield libav.copyout_u8(extradataPtr, edSize);
-            }
+            const extradata = codecpar.extradata;
             // Then convert the actual codec
             switch (codecString) {
                 case "flac":
@@ -63,9 +64,10 @@
                     break;
                 case "aac":
                     {
-                        const profile = yield libav.AVCodecParameters_profile(stream.codecpar);
+                        const profile = codecpar.profile;
                         switch (profile) {
                             case 1: // AAC_LOW
+                            default:
                                 ret.codec = "mp4a.40.2";
                                 break;
                             case 4: // AAC_HE
@@ -92,8 +94,8 @@
                         ret.codec = { libavjs: {
                                 codec: codecString,
                                 ctx: {
-                                    channels: yield libav.AVCodecParameters_channels(stream.codecpar),
-                                    sample_rate: yield libav.AVCodecParameters_sample_rate(stream.codecpar)
+                                    channels: codecpar.channels,
+                                    sample_rate: codecpar.sample_rate
                                 }
                             } };
                         if (extradata)
@@ -114,38 +116,43 @@
      */
     function videoStreamToConfig$1(libav, stream) {
         return __awaiter$2(this, void 0, void 0, function* () {
-            const codecString = yield libav.avcodec_get_name(stream.codec_id);
+            let codecpar;
+            if (stream.codecpar) {
+                codecpar = yield libav.ff_copyout_codecpar(stream.codecpar);
+            }
+            else {
+                codecpar = stream;
+            }
+            const codecString = yield libav.avcodec_get_name(codecpar.codec_id);
             // Start with the basics
             const ret = {
-                codec: null,
-                codedWidth: yield libav.AVCodecParameters_width(stream.codecpar),
-                codedHeight: yield libav.AVCodecParameters_height(stream.codecpar)
+                codec: "unknown",
+                codedWidth: codecpar.width,
+                codedHeight: codecpar.height
             };
-            // Get the extradata
-            const extradataPtr = yield libav.AVCodecParameters_extradata(stream.codecpar);
-            let extradata = null;
-            if (extradataPtr) {
-                const edSize = yield libav.AVCodecParameters_extradata_size(stream.codecpar);
-                extradata = yield libav.copyout_u8(extradataPtr, edSize);
-            }
+            const extradata = codecpar.extradata;
             // Some commonly needed data
-            let profile = yield libav.AVCodecParameters_profile(stream.codecpar);
-            let level = yield libav.AVCodecParameters_level(stream.codecpar);
+            let profile = codecpar.profile;
+            let level = codecpar.level;
             // Then convert the actual codec
             switch (codecString) {
                 case "av1":
                     {
                         let codec = "av01";
                         // <profile>
+                        if (profile < 0)
+                            profile = 0;
                         codec += `.0${profile}`;
                         // <level><tier>
+                        if (level < 0)
+                            level = 0;
                         let levelS = level.toString();
                         if (levelS.length < 2)
                             levelS = `0${level}`;
                         const tier = "M"; // FIXME: Is this exposed by ffmpeg?
                         codec += `.${levelS}${tier}`;
                         // <bitDepth>
-                        const format = yield libav.AVCodecParameters_format(stream.codecpar);
+                        const format = codecpar.format;
                         const desc = yield libav.av_pix_fmt_desc_get(format);
                         let bitDepth = (yield libav.AVPixFmtDescriptor_comp_depth(desc, 0)).toString();
                         if (bitDepth.length < 2)
@@ -292,6 +299,10 @@
                         else {
                             /* NOTE: This string was extrapolated from hlsenc.c, but is clearly
                              * not valid for every possible H.265 stream. */
+                            if (profile < 0)
+                                profile = 0;
+                            if (level < 0)
+                                level = 0;
                             codec = `hev1.${profile}.4.L${level}.B01`;
                         }
                         ret.codec = codec;
@@ -318,7 +329,7 @@
                             levelS = `0${levelS}`;
                         codec += `.${levelS}`;
                         // <bitDepth>
-                        const format = yield libav.AVCodecParameters_format(stream.codecpar);
+                        const format = codecpar.format;
                         const desc = yield libav.av_pix_fmt_desc_get(format);
                         let bitDepth = (yield libav.AVPixFmtDescriptor_comp_depth(desc, 0)).toString();
                         if (bitDepth === "0")
@@ -350,8 +361,9 @@
                         ret.codec = { libavjs: {
                                 codec: codecString,
                                 ctx: {
-                                    channels: yield libav.AVCodecParameters_channels(stream.codecpar),
-                                    sample_rate: yield libav.AVCodecParameters_sample_rate(stream.codecpar)
+                                    pix_fmt: codecpar.format,
+                                    width: codecpar.width,
+                                    height: codecpar.height
                                 }
                             } };
                         if (extradata)
@@ -368,20 +380,28 @@
      * Convert the timestamp and duration from a libav.js packet to microseconds for
      * WebCodecs.
      */
-    function times$1(packet, stream) {
+    function times$1(packet, timeBaseSrc) {
         // Convert from lo, hi to f64
-        let pDuration = packet.durationhi * 0x100000000 + packet.duration;
-        let pts = packet.ptshi * 0x100000000 + packet.pts;
+        let pDuration = (packet.durationhi || 0) * 0x100000000 + (packet.duration || 0);
+        let pts = (packet.ptshi || 0) * 0x100000000 + (packet.pts || 0);
         if (typeof LibAV !== "undefined" && LibAV.i64tof64) {
-            pDuration = LibAV.i64tof64(packet.duration, packet.durationhi);
-            pts = LibAV.i64tof64(packet.pts, packet.ptshi);
+            pDuration = LibAV.i64tof64(packet.duration || 0, packet.durationhi || 0);
+            pts = LibAV.i64tof64(packet.pts || 0, packet.ptshi || 0);
         }
         // Get the appropriate time base
-        let tbNum = packet.time_base_num;
-        let tbDen = packet.time_base_den;
+        let tbNum = packet.time_base_num || 1;
+        let tbDen = packet.time_base_den || 1000000;
         if (!tbNum) {
-            tbNum = stream.time_base_num;
-            tbDen = stream.time_base_den;
+            if (timeBaseSrc.length) {
+                const timeBase = timeBaseSrc;
+                tbNum = timeBase[0];
+                tbDen = timeBase[1];
+            }
+            else {
+                const timeBase = timeBaseSrc;
+                tbNum = timeBase.time_base_num;
+                tbDen = timeBase.time_base_den;
+            }
         }
         // Convert the duration
         const duration = Math.round(pDuration * tbNum / tbDen * 1000000);
@@ -392,17 +412,18 @@
     /**
      * Convert a libav.js audio packet to a WebCodecs EncodedAudioChunk.
      * @param packet  The packet itself.
-     * @param stream  The stream this packet belongs to (necessary for timestamp conversion).
+     * @param timeBaseSrc  Source for time base, which can be a Stream or just a
+     *                     timebase.
      * @param opts  Extra options. In particular, if using a polyfill, you can set
      *              the EncodedAudioChunk constructor here.
      */
-    function packetToEncodedAudioChunk$1(packet, stream, opts = {}) {
+    function packetToEncodedAudioChunk$1(packet, timeBaseSrc, opts = {}) {
         let EAC;
         if (opts.EncodedAudioChunk)
             EAC = opts.EncodedAudioChunk;
         else
             EAC = EncodedAudioChunk;
-        const { timestamp, duration } = times$1(packet, stream);
+        const { timestamp, duration } = times$1(packet, timeBaseSrc);
         return new EAC({
             type: "key", // all audio chunks are keyframes in all audio codecs
             timestamp,
@@ -413,19 +434,20 @@
     /**
      * Convert a libav.js video packet to a WebCodecs EncodedVideoChunk.
      * @param packet  The packet itself.
-     * @param stream  The stream this packet belongs to (necessary for timestamp conversion).
+     * @param timeBaseSrc  Source for time base, which can be a Stream or just a
+     *                     timebase.
      * @param opts  Extra options. In particular, if using a polyfill, you can set
      *              the EncodedVideoChunk constructor here.
      */
-    function packetToEncodedVideoChunk$1(packet, stream, opts = {}) {
+    function packetToEncodedVideoChunk$1(packet, timeBaseSrc, opts = {}) {
         let EVC;
         if (opts.EncodedVideoChunk)
             EVC = opts.EncodedVideoChunk;
         else
             EVC = EncodedVideoChunk;
-        const { timestamp, duration } = times$1(packet, stream);
+        const { timestamp, duration } = times$1(packet, timeBaseSrc);
         return new EVC({
-            type: (packet.flags & 1) ? "key" : "delta",
+            type: ((packet.flags || 0) & 1) ? "key" : "delta",
             timestamp,
             duration,
             data: packet.data.buffer
@@ -644,7 +666,7 @@
         const den = stream[2];
         return {
             timestamp: Math.round(chunk.timestamp * den / num / 1000000),
-            duration: Math.round(chunk.duration * den / num / 1000000)
+            duration: Math.round((chunk.duration || 0) * den / num / 1000000)
         };
     }
     /*
@@ -975,7 +997,7 @@
         let transfer = [];
         let timeBase = opts.timeBase;
         if (!timeBase && frame.time_base_num)
-            timeBase = [frame.time_base_num, frame.time_base_den];
+            timeBase = [frame.time_base_num || 1, frame.time_base_den || 1000000];
         if (frame.layout) {
             // Modern (libav.js ≥ 5) frame in WebCodecs-like format
             data = frame.data;
@@ -986,7 +1008,7 @@
         else {
             // Pre-libavjs-5 frame with one array per row
             // Combine all the frame data into a single object
-            const layout = [];
+            layout = [];
             let size = 0;
             for (let p = 0; p < frame.data.length; p++) {
                 const plane = frame.data[p];
@@ -996,7 +1018,7 @@
                 });
                 size += plane.length * plane[0].length;
             }
-            const data = new Uint8Array(size);
+            data = new Uint8Array(size);
             let offset = 0;
             for (let p = 0; p < frame.data.length; p++) {
                 const plane = frame.data[p];
@@ -1037,7 +1059,7 @@
             format,
             codedWidth: frame.width,
             codedHeight: frame.height,
-            timestamp: laTimeToWCTime(frame.pts, frame.ptshi, timeBase),
+            timestamp: laTimeToWCTime(frame.pts || 0, frame.ptshi || 0, timeBase),
             layout,
             transfer
         });
@@ -1057,7 +1079,7 @@
             AD = AudioData;
         let timeBase = opts.timeBase;
         if (!timeBase && frame.time_base_num)
-            timeBase = [frame.time_base_num, frame.time_base_den];
+            timeBase = [frame.time_base_num || 1, frame.time_base_den || 1000000];
         // Combine all the frame data into a single object
         let size = 0;
         if (frame.data.buffer) {
@@ -1120,7 +1142,7 @@
             sampleRate: frame.sample_rate,
             numberOfFrames: frame.nb_samples,
             numberOfChannels: frame.channels,
-            timestamp: laTimeToWCTime(frame.pts, frame.ptshi, timeBase)
+            timestamp: laTimeToWCTime(frame.pts || 0, frame.ptshi || 0, timeBase)
         });
     }
 
