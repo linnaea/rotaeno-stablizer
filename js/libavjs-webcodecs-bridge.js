@@ -389,8 +389,8 @@
             pts = LibAV.i64tof64(packet.pts || 0, packet.ptshi || 0);
         }
         // Get the appropriate time base
-        let tbNum = packet.time_base_num || 1;
-        let tbDen = packet.time_base_den || 1000000;
+        let tbNum = packet.time_base_num || 0;
+        let tbDen = packet.time_base_den || 1;
         if (!tbNum) {
             if (timeBaseSrc.length) {
                 const timeBase = timeBaseSrc;
@@ -997,7 +997,7 @@
         let transfer = [];
         let timeBase = opts.timeBase;
         if (!timeBase && frame.time_base_num)
-            timeBase = [frame.time_base_num || 1, frame.time_base_den || 1000000];
+            timeBase = [frame.time_base_num || 0, frame.time_base_den || 1];
         if (frame.layout) {
             // Modern (libav.js ≥ 5) frame in WebCodecs-like format
             data = frame.data;
@@ -1079,7 +1079,7 @@
             AD = AudioData;
         let timeBase = opts.timeBase;
         if (!timeBase && frame.time_base_num)
-            timeBase = [frame.time_base_num || 1, frame.time_base_den || 1000000];
+            timeBase = [frame.time_base_num || 0, frame.time_base_den || 1];
         // Combine all the frame data into a single object
         let size = 0;
         if (frame.data.buffer) {
