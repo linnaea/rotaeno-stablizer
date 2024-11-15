@@ -1,7 +1,9 @@
 # Rotaeno capture stablizer
-OBS filter for stablizing Rotaeno game capture
+OBS filter for stablizing Rotaeno game capture / 稳定Rotaeno画面的OBS插件
 
-[Click here for a tool that can be used in a modern browser / 点这里打开网页版工具](https://linnaea.github.io/rotaeno-stablizer/)
+There are also [Python-based](https://github.com/Lawrenceeeeeeee/python_rotaeno_stabilizer) and [browser-based](https://linnaea.github.io/rotaeno-stablizer/) (including Chrome on Android) tools that can stablize recorded videos.
+
+如果是要稳定录屏视频的话，可以考虑使用[基于Python](https://github.com/Lawrenceeeeeeee/python_rotaeno_stabilizer)或者[运行在浏览器中](https://linnaea.github.io/rotaeno-stablizer/)（包括Android上的Chrome浏览器）的工具。
 
 中文说明往下翻
 
