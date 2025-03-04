@@ -16,7 +16,7 @@
         }
     </style>
 
-    <script src="js/libav-6.4.7.1-webcodecs.js"></script>
+    <script src="js/libav-6.5.7.1-webcodecs.js"></script>
     <script src="js/libavjs-webcodecs-bridge.js"></script>
     <script>
         const Lock = function() {
@@ -112,6 +112,7 @@
                 resizableArrayBuffer: () => new ArrayBuffer(0, {maxByteLength: 1024}).resize(1024) || true,
                 webCodecs: () => VideoEncoder && VideoDecoder,
                 offscreenCanvas: () => new OffscreenCanvas(16, 16).getContext('2d'),
+                notTbsBrowser: () => navigator.userAgent.indexOf(' TBS/') < 0,
             };
             let failedChecks = []
             for (const feature in featureCheck) {
