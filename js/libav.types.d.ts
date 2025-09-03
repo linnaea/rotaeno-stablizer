@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2024 Yahweasel and contributors
+ * Copyright (C) 2021-2025 Yahweasel and contributors
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -277,6 +277,11 @@ declare namespace LibAV {
          */
         channel_layoutmask?: number;
         channels?: number;
+
+        /**
+         * Side data. Codec-specific.
+         */
+        coded_side_data?: any;
     }
 
     /**
@@ -407,8 +412,43 @@ declare namespace LibAV {
          */
         bigIntToi64(val: BigInt): [number, number];
 
-        // Enumerations:
+        /**
+         * Extract the channel layout from a frame (or any other source of
+         * channel layout). Unifies the various ways that channel layouts may
+         * be stored.
+         */
+        ff_channel_layout(frame: {
+            channel_layout?: number,
+            channels?: number
+        }): number;
+
+        /**
+         * Extract the channel count from a frame (or any other source of
+         * channel layout). Unifies the various ways that channel layouts may be
+         * stored.
+         */
+        ff_channels(frame: {
+            channel_layout?: number,
+            channels?: number
+        }): number;
+
+        /**
+         * Convert a major, minor, and revision number to the internal integer
+         * version representation used in libav. Note that these version numbers
+         * are *not* FFmpeg versions. They are the internal libav versions, one
+         * for each libav library.
+         */
+        AV_VERSION_INT(maj: number, min: number, rev: number): number;
+
+        // Constants:
+        AV_NOPTS_VALUE_I64: [number, number];
+        AV_NOPTS_VALUE_LO: number;
+        AV_NOPTS_VALUE_HI: number;
+        AV_NOPTS_VALUE: number;
+        AV_TIME_BASE: number;
         AV_OPT_SEARCH_CHILDREN: number;
+
+        // Enumerations:
         AVMEDIA_TYPE_UNKNOWN: number;
         AVMEDIA_TYPE_VIDEO: number;
         AVMEDIA_TYPE_AUDIO: number;
@@ -566,14 +606,45 @@ declare namespace LibAV {
          */
         worker?: Worker;
 
-    /**
- * Return number of bytes per sample.
- *
- * @param sample_fmt the sample format
- * @return number of bytes per sample or zero if unknown for the given
- * sample format
+calloc(a0: number,a1: number): Promise<number>;
+close(a0: number): Promise<number>;
+dup2(a0: number,a1: number): Promise<number>;
+free(a0: number): Promise<void>;
+malloc(a0: number): Promise<number>;
+mallinfo_uordblks(): Promise<number>;
+open(a0: string,a1: number,a2: number): Promise<number>;
+strerror(a0: number): Promise<string>;
+libavjs_create_main_thread(): Promise<number>;
+libavjs_with_swscale(): Promise<number>;
+copyin_u8(ptr: number,arr: Uint8Array): Promise<void>;
+copyout_u8(ptr: number,len: number): Promise<Uint8Array>;
+copyin_s16(ptr: number,arr: Int16Array): Promise<void>;
+copyout_s16(ptr: number,len: number): Promise<Int16Array>;
+copyin_s32(ptr: number,arr: Int32Array): Promise<void>;
+copyout_s32(ptr: number,len: number): Promise<Int32Array>;
+copyin_f32(ptr: number,arr: Float32Array): Promise<void>;
+copyout_f32(ptr: number,len: number): Promise<Float32Array>;
+/**
+ * Allocate and copy in a 32-bit int list.
+ * @param list  List of numbers to copy in
  */
-av_get_bytes_per_sample(sample_fmt: number): Promise<number>;
+ff_malloc_int32_list(list: number[]): Promise<number>;
+/**
+ * Allocate and copy in a 64-bit int list.
+ * @param list  List of numbers to copy in
+ */
+ff_malloc_int64_list(list: number[]): Promise<number>;
+/**
+ * Allocate and copy in a string array. The resulting array will be
+ * NULL-terminated.
+ * @param arr  Array of strings to copy in.
+ */
+ff_malloc_string_array(arr: string[]): Promise<number>;
+/**
+ * Free a string array allocated by ff_malloc_string_array.
+ * @param ptr  Pointer to the array to free.
+ */
+ff_free_string_array(ptr: number): Promise<void>;
 /**
  * Compare two timestamps each in its own time base.
  *
@@ -587,6 +658,59 @@ av_get_bytes_per_sample(sample_fmt: number): Promise<number>;
  * the `int64_t` range when represented in the other's timebase.
  */
 av_compare_ts_js(ts_a: number,tb_a: number,ts_b: number,tb_b: number,a4: number,a5: number,a6: number,a7: number): Promise<number>;
+/**
+ * Copy entries from one AVDictionary struct into another.
+ *
+ * @note Metadata is read using the ::AV_DICT_IGNORE_SUFFIX flag
+ *
+ * @param dst   Pointer to a pointer to a AVDictionary struct to copy into. If *dst is NULL,
+ *              this function will allocate a struct for you and put it in *dst
+ * @param src   Pointer to the source AVDictionary struct to copy items from.
+ * @param flags Flags to use when setting entries in *dst
+ *
+ * @return 0 on success, negative AVERROR code on failure. If dst was allocated
+ *           by this function, callers should free the associated memory.
+ */
+av_dict_copy_js(dst: number,src: number,flags: number): Promise<number>;
+/**
+ * Free all the memory allocated for an AVDictionary struct
+ * and all keys and values.
+ */
+av_dict_free(m: number): Promise<void>;
+/**
+ * Set the given entry in *pm, overwriting an existing entry.
+ *
+ * Note: If AV_DICT_DONT_STRDUP_KEY or AV_DICT_DONT_STRDUP_VAL is set,
+ * these arguments will be freed on error.
+ *
+ * @warning Adding a new entry to a dictionary invalidates all existing entries
+ * previously returned with av_dict_get() or av_dict_iterate().
+ *
+ * @param pm        Pointer to a pointer to a dictionary struct. If *pm is NULL
+ *                  a dictionary struct is allocated and put in *pm.
+ * @param key       Entry key to add to *pm (will either be av_strduped or added as a new key depending on flags)
+ * @param value     Entry value to add to *pm (will be av_strduped or added as a new key depending on flags).
+ *                  Passing a NULL value will cause an existing entry to be deleted.
+ *
+ * @return          >= 0 on success otherwise an error code <0
+ */
+av_dict_set_js(pm: number,key: string,value: string,flags: number): Promise<number>;
+/**
+ * Get the current log level
+ *
+ * @see lavu_log_constants
+ *
+ * @return Current log level
+ */
+av_log_get_level(): Promise<number>;
+/**
+ * Set the log level
+ *
+ * @see lavu_log_constants
+ *
+ * @param level Logging level
+ */
+av_log_set_level(level: number): Promise<void>;
 /**
  * @defgroup opt_set_funcs Option setting functions
  * @{
@@ -618,6 +742,19 @@ av_compare_ts_js(ts_a: number,tb_a: number,ts_b: number,tb_b: number,a4: number,
  */
 av_opt_set(obj: number,name: string,val: string,search_flags: number): Promise<number>;
 av_opt_set_int_list_js(a0: number,a1: string,a2: number,a3: number,a4: number,a5: number): Promise<number>;
+/**
+ * Duplicate a string.
+ *
+ * @param s String to be duplicated
+ * @return Pointer to a newly-allocated string containing a
+ *         copy of `s` or `NULL` if the string cannot be allocated
+ * @see av_strndup()
+ */
+av_strdup(s: string): Promise<number>;
+ff_error(a0: number): Promise<string>;
+ff_nothing(): Promise<void>;
+LIBAVUTIL_VERSION_INT(): Promise<number>;
+av_dict_free_js(ptr: number): Promise<void>;
 /**
  * Allocate an AVFrame and set its fields to default values.  The resulting
  * struct must be freed using av_frame_free().
@@ -702,23 +839,149 @@ av_frame_ref(dst: number,src: number): Promise<number>;
  * Unreference all the buffers referenced by frame and reset the frame fields.
  */
 av_frame_unref(frame: number): Promise<void>;
+/**
+ * Return number of bytes per sample.
+ *
+ * @param sample_fmt the sample format
+ * @return number of bytes per sample or zero if unknown for the given
+ * sample format
+ */
+av_get_bytes_per_sample(sample_fmt: number): Promise<number>;
+/**
+ * Return the name of sample_fmt, or NULL if sample_fmt is not
+ * recognized.
+ */
+av_get_sample_fmt_name(sample_fmt: number): Promise<string>;
+/**
+ * @return a pixel format descriptor for provided pixel format or NULL if
+ * this pixel format is unknown.
+ */
+av_pix_fmt_desc_get(pix_fmt: number): Promise<number>;
+AVPixFmtDescriptor_comp_depth(a0: number,a1: number): Promise<number>;
 ff_frame_rescale_ts_js(a0: number,a1: number,a2: number,a3: number,a4: number): Promise<void>;
+AVFrame_channel_layout(ptr: number): Promise<number>;
+AVFrame_channel_layout_s(ptr: number,val: number): Promise<void>;
+AVFrame_channel_layouthi(ptr: number): Promise<number>;
+AVFrame_channel_layouthi_s(ptr: number,val: number): Promise<void>;
+AVFrame_channels(ptr: number): Promise<number>;
+AVFrame_channels_s(ptr: number,val: number): Promise<void>;
+AVFrame_channel_layoutmask(ptr: number): Promise<number>;
+AVFrame_channel_layoutmask_s(ptr: number,val: number): Promise<void>;
+AVFrame_ch_layout_nb_channels(ptr: number): Promise<number>;
+AVFrame_ch_layout_nb_channels_s(ptr: number,val: number): Promise<void>;
+AVFrame_crop_bottom(ptr: number): Promise<number>;
+AVFrame_crop_bottom_s(ptr: number,val: number): Promise<void>;
+AVFrame_crop_left(ptr: number): Promise<number>;
+AVFrame_crop_left_s(ptr: number,val: number): Promise<void>;
+AVFrame_crop_right(ptr: number): Promise<number>;
+AVFrame_crop_right_s(ptr: number,val: number): Promise<void>;
+AVFrame_crop_top(ptr: number): Promise<number>;
+AVFrame_crop_top_s(ptr: number,val: number): Promise<void>;
+AVFrame_data_a(ptr: number,idx: number): Promise<number>;
+AVFrame_data_a_s(ptr: number,idx: number,val: number): Promise<void>;
+AVFrame_duration(ptr: number): Promise<number>;
+AVFrame_duration_s(ptr: number,val: number): Promise<void>;
+AVFrame_flags(ptr: number): Promise<number>;
+AVFrame_flags_s(ptr: number,val: number): Promise<void>;
+AVFrame_format(ptr: number): Promise<number>;
+AVFrame_format_s(ptr: number,val: number): Promise<void>;
+AVFrame_height(ptr: number): Promise<number>;
+AVFrame_height_s(ptr: number,val: number): Promise<void>;
+AVFrame_key_frame(ptr: number): Promise<number>;
+AVFrame_key_frame_s(ptr: number,val: number): Promise<void>;
+AVFrame_linesize_a(ptr: number,idx: number): Promise<number>;
+AVFrame_linesize_a_s(ptr: number,idx: number,val: number): Promise<void>;
+AVFrame_nb_samples(ptr: number): Promise<number>;
+AVFrame_nb_samples_s(ptr: number,val: number): Promise<void>;
+AVFrame_pict_type(ptr: number): Promise<number>;
+AVFrame_pict_type_s(ptr: number,val: number): Promise<void>;
+AVFrame_pts(ptr: number): Promise<number>;
+AVFrame_pts_s(ptr: number,val: number): Promise<void>;
+AVFrame_ptshi(ptr: number): Promise<number>;
+AVFrame_ptshi_s(ptr: number,val: number): Promise<void>;
+AVFrame_sample_aspect_ratio_num(ptr: number): Promise<number>;
+AVFrame_sample_aspect_ratio_den(ptr: number): Promise<number>;
+AVFrame_sample_aspect_ratio_num_s(ptr: number,val: number): Promise<number>;
+AVFrame_sample_aspect_ratio_den_s(ptr: number,val: number): Promise<number>;
+AVFrame_sample_aspect_ratio_s(ptr: number,num: number,den: number): Promise<number>;
+AVFrame_sample_rate(ptr: number): Promise<number>;
+AVFrame_sample_rate_s(ptr: number,val: number): Promise<void>;
+AVFrame_time_base_num(ptr: number): Promise<number>;
+AVFrame_time_base_den(ptr: number): Promise<number>;
+AVFrame_time_base_num_s(ptr: number,val: number): Promise<number>;
+AVFrame_time_base_den_s(ptr: number,val: number): Promise<number>;
+AVFrame_time_base_s(ptr: number,num: number,den: number): Promise<number>;
+AVFrame_width(ptr: number): Promise<number>;
+AVFrame_width_s(ptr: number,val: number): Promise<void>;
+AVPixFmtDescriptor_flags(ptr: number): Promise<number>;
+AVPixFmtDescriptor_flags_s(ptr: number,val: number): Promise<void>;
+AVPixFmtDescriptor_log2_chroma_h(ptr: number): Promise<number>;
+AVPixFmtDescriptor_log2_chroma_h_s(ptr: number,val: number): Promise<void>;
+AVPixFmtDescriptor_log2_chroma_w(ptr: number): Promise<number>;
+AVPixFmtDescriptor_log2_chroma_w_s(ptr: number,val: number): Promise<void>;
+AVPixFmtDescriptor_nb_components(ptr: number): Promise<number>;
+AVPixFmtDescriptor_nb_components_s(ptr: number,val: number): Promise<void>;
+av_frame_free_js(ptr: number): Promise<void>;
 /**
- * Get the current log level
- *
- * @see lavu_log_constants
- *
- * @return Current log level
+ * Copy out a frame.
+ * @param frame  AVFrame
  */
-av_log_get_level(): Promise<number>;
+ff_copyout_frame(frame: number): Promise<Frame>;
 /**
- * Set the log level
- *
- * @see lavu_log_constants
- *
- * @param level Logging level
+ * Copy out a video frame. `ff_copyout_frame` will copy out a video frame if a
+ * video frame is found, but this may be faster if you know it's a video frame.
+ * @param frame  AVFrame
  */
-av_log_set_level(level: number): Promise<void>;
+ff_copyout_frame_video(frame: number): Promise<Frame>;
+/**
+ * Get the size of a packed video frame in its native format.
+ * @param frame  AVFrame
+ */
+ff_frame_video_packed_size(frame: number): Promise<Frame>;
+/**
+ * Copy out a video frame, as a single packed Uint8Array.
+ * @param frame  AVFrame
+ */
+ff_copyout_frame_video_packed(frame: number): Promise<Frame>;
+/**
+ * Copy out a video frame as an ImageData. The video frame *must* be RGBA for
+ * this to work as expected (though some ImageData will be returned for any
+ * frame).
+ * @param frame  AVFrame
+ */
+ff_copyout_frame_video_imagedata(
+    frame: number
+): Promise<ImageData>;
+/**
+ * Copy in a frame.
+ * @param framePtr  AVFrame
+ * @param frame  Frame to copy in, as either a Frame or an AVFrame pointer
+ */
+ff_copyin_frame(framePtr: number, frame: Frame | number): Promise<void>;
+/**
+ * @return descriptor for given codec ID or NULL if no descriptor exists.
+ */
+avcodec_descriptor_get(id: number): Promise<number>;
+/**
+ * @return codec descriptor with the given name or NULL if no such descriptor
+ *         exists.
+ */
+avcodec_descriptor_get_by_name(name: string): Promise<number>;
+/**
+ * Iterate over all codec descriptors known to libavcodec.
+ *
+ * @param prev previous descriptor. NULL to get the first descriptor.
+ *
+ * @return next descriptor or NULL after the last descriptor
+ */
+avcodec_descriptor_next(prev: number): Promise<number>;
+/**
+ * Increase packet size, correctly zeroing padding
+ *
+ * @param pkt packet
+ * @param grow_by number of bytes by which to increase the size of the packet
+ */
+av_grow_packet(pkt: number,grow_by: number): Promise<number>;
 /**
  * Allocate an AVPacket and set its fields to default values.  The resulting
  * struct must be freed using av_packet_free().
@@ -750,6 +1013,16 @@ av_packet_clone(src: number): Promise<number>;
  * @note passing NULL is a no-op.
  */
 av_packet_free(pkt: number): Promise<void>;
+/**
+ * Create a writable reference for the data described by a given packet,
+ * avoiding data copy if possible.
+ *
+ * @param pkt Packet whose data should be made writable.
+ *
+ * @return 0 on success, a negative AVERROR on failure. On failure, the
+ *         packet is unchanged.
+ */
+av_packet_make_writable(pkt: number): Promise<number>;
 /**
  * Allocate new information of a packet.
  *
@@ -789,6 +1062,9 @@ av_packet_ref(dst: number,src: number): Promise<number>;
  *               converted
  */
 av_packet_rescale_ts_js(pkt: number,tb_src: number,tb_dst: number,a3: number,a4: number): Promise<void>;
+AVPacketSideData_data(a0: number,a1: number): Promise<number>;
+AVPacketSideData_size(a0: number,a1: number): Promise<number>;
+AVPacketSideData_type(a0: number,a1: number): Promise<number>;
 /**
  * Wipe the packet.
  *
@@ -799,144 +1075,888 @@ av_packet_rescale_ts_js(pkt: number,tb_src: number,tb_dst: number,a3: number,a4:
  */
 av_packet_unref(pkt: number): Promise<void>;
 /**
- * Duplicate a string.
+ * Reduce packet size, correctly zeroing padding
  *
- * @param s String to be duplicated
- * @return Pointer to a newly-allocated string containing a
- *         copy of `s` or `NULL` if the string cannot be allocated
- * @see av_strndup()
+ * @param pkt packet
+ * @param size new size
  */
-av_strdup(s: string): Promise<number>;
+av_shrink_packet(pkt: number,size: number): Promise<void>;
+ff_codecpar_new_side_data(a0: number,a1: number,a2: number): Promise<number>;
+LIBAVCODEC_VERSION_INT(): Promise<number>;
+AVCodecDescriptor_id(ptr: number): Promise<number>;
+AVCodecDescriptor_id_s(ptr: number,val: number): Promise<void>;
+AVCodecDescriptor_long_name(ptr: number): Promise<string>;
+AVCodecDescriptor_mime_types_a(ptr: number,idx: number): Promise<number>;
+AVCodecDescriptor_mime_types_a_s(ptr: number,idx: number,val: number): Promise<void>;
+AVCodecDescriptor_name(ptr: number): Promise<string>;
+AVCodecDescriptor_props(ptr: number): Promise<number>;
+AVCodecDescriptor_props_s(ptr: number,val: number): Promise<void>;
+AVCodecDescriptor_type(ptr: number): Promise<number>;
+AVCodecDescriptor_type_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_bit_rate(ptr: number): Promise<number>;
+AVCodecParameters_bit_rate_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_channel_layoutmask(ptr: number): Promise<number>;
+AVCodecParameters_channel_layoutmask_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_channels(ptr: number): Promise<number>;
+AVCodecParameters_channels_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_ch_layout_nb_channels(ptr: number): Promise<number>;
+AVCodecParameters_ch_layout_nb_channels_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_chroma_location(ptr: number): Promise<number>;
+AVCodecParameters_chroma_location_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_codec_id(ptr: number): Promise<number>;
+AVCodecParameters_codec_id_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_codec_tag(ptr: number): Promise<number>;
+AVCodecParameters_codec_tag_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_codec_type(ptr: number): Promise<number>;
+AVCodecParameters_codec_type_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_coded_side_data(ptr: number): Promise<number>;
+AVCodecParameters_coded_side_data_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_color_primaries(ptr: number): Promise<number>;
+AVCodecParameters_color_primaries_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_color_range(ptr: number): Promise<number>;
+AVCodecParameters_color_range_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_color_space(ptr: number): Promise<number>;
+AVCodecParameters_color_space_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_color_trc(ptr: number): Promise<number>;
+AVCodecParameters_color_trc_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_extradata(ptr: number): Promise<number>;
+AVCodecParameters_extradata_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_extradata_size(ptr: number): Promise<number>;
+AVCodecParameters_extradata_size_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_format(ptr: number): Promise<number>;
+AVCodecParameters_format_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_framerate_num(ptr: number): Promise<number>;
+AVCodecParameters_framerate_den(ptr: number): Promise<number>;
+AVCodecParameters_framerate_num_s(ptr: number,val: number): Promise<number>;
+AVCodecParameters_framerate_den_s(ptr: number,val: number): Promise<number>;
+AVCodecParameters_framerate_s(ptr: number,num: number,den: number): Promise<number>;
+AVCodecParameters_height(ptr: number): Promise<number>;
+AVCodecParameters_height_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_level(ptr: number): Promise<number>;
+AVCodecParameters_level_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_nb_coded_side_data(ptr: number): Promise<number>;
+AVCodecParameters_nb_coded_side_data_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_profile(ptr: number): Promise<number>;
+AVCodecParameters_profile_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_sample_rate(ptr: number): Promise<number>;
+AVCodecParameters_sample_rate_s(ptr: number,val: number): Promise<void>;
+AVCodecParameters_width(ptr: number): Promise<number>;
+AVCodecParameters_width_s(ptr: number,val: number): Promise<void>;
+AVPacket_data(ptr: number): Promise<number>;
+AVPacket_data_s(ptr: number,val: number): Promise<void>;
+AVPacket_dts(ptr: number): Promise<number>;
+AVPacket_dts_s(ptr: number,val: number): Promise<void>;
+AVPacket_dtshi(ptr: number): Promise<number>;
+AVPacket_dtshi_s(ptr: number,val: number): Promise<void>;
+AVPacket_duration(ptr: number): Promise<number>;
+AVPacket_duration_s(ptr: number,val: number): Promise<void>;
+AVPacket_durationhi(ptr: number): Promise<number>;
+AVPacket_durationhi_s(ptr: number,val: number): Promise<void>;
+AVPacket_flags(ptr: number): Promise<number>;
+AVPacket_flags_s(ptr: number,val: number): Promise<void>;
+AVPacket_pos(ptr: number): Promise<number>;
+AVPacket_pos_s(ptr: number,val: number): Promise<void>;
+AVPacket_poshi(ptr: number): Promise<number>;
+AVPacket_poshi_s(ptr: number,val: number): Promise<void>;
+AVPacket_pts(ptr: number): Promise<number>;
+AVPacket_pts_s(ptr: number,val: number): Promise<void>;
+AVPacket_ptshi(ptr: number): Promise<number>;
+AVPacket_ptshi_s(ptr: number,val: number): Promise<void>;
+AVPacket_side_data(ptr: number): Promise<number>;
+AVPacket_side_data_s(ptr: number,val: number): Promise<void>;
+AVPacket_side_data_elems(ptr: number): Promise<number>;
+AVPacket_side_data_elems_s(ptr: number,val: number): Promise<void>;
+AVPacket_size(ptr: number): Promise<number>;
+AVPacket_size_s(ptr: number,val: number): Promise<void>;
+AVPacket_stream_index(ptr: number): Promise<number>;
+AVPacket_stream_index_s(ptr: number,val: number): Promise<void>;
+AVPacket_time_base_num(ptr: number): Promise<number>;
+AVPacket_time_base_den(ptr: number): Promise<number>;
+AVPacket_time_base_num_s(ptr: number,val: number): Promise<number>;
+AVPacket_time_base_den_s(ptr: number,val: number): Promise<number>;
+AVPacket_time_base_s(ptr: number,num: number,den: number): Promise<number>;
+av_packet_free_js(ptr: number): Promise<void>;
+avcodec_parameters_free_js(ptr: number): Promise<void>;
 /**
- * Get a frame with filtered data from sink and put it in frame.
+ * Copy out a packet.
+ * @param pkt  AVPacket
+ */
+ff_copyout_packet(pkt: number): Promise<Packet>;
+/**
+ * Copy "out" a packet by just copying its data into a new AVPacket.
+ * @param pkt  AVPacket
+ */
+ff_copyout_packet_ptr(pkt: number): Promise<number>;
+/**
+ * Copy in a packet.
+ * @param pktPtr  AVPacket
+ * @param packet  Packet to copy in, as either a Packet or an AVPacket pointer
+ */
+ff_copyin_packet(pktPtr: number, packet: Packet | number): Promise<void>;
+/**
+ * Copy out codec parameters.
+ * @param codecpar  AVCodecParameters
+ */
+ff_copyout_codecpar(codecpar: number): Promise<CodecParameters>;
+/**
+ * Copy in codec parameters.
+ * @param codecparPtr  AVCodecParameters
+ * @param codecpar  Codec parameters to copy in.
+ */
+ff_copyin_codecpar(codecparPtr: number, codecpar: CodecParameters): Promise<void>;
+/**
+ * Reset the internal bitstream filter state. Should be called e.g. when seeking.
+ */
+av_bsf_flush(ctx: number): Promise<void>;
+/**
+ * Free a bitstream filter context and everything associated with it; write NULL
+ * into the supplied pointer.
+ */
+av_bsf_free(ctx: number): Promise<void>;
+/**
+ * Prepare the filter for use, after all the parameters and options have been
+ * set.
  *
- * @param ctx pointer to a context of a buffersink or abuffersink AVFilter.
- * @param frame pointer to an allocated frame that will be filled with data.
- *              The data must be freed using av_frame_unref() / av_frame_free()
+ * @param ctx a AVBSFContext previously allocated with av_bsf_alloc()
+ */
+av_bsf_init(ctx: number): Promise<number>;
+/**
+ * Parse string describing list of bitstream filters and create single
+ * @ref AVBSFContext describing the whole chain of bitstream filters.
+ * Resulting @ref AVBSFContext can be treated as any other @ref AVBSFContext freshly
+ * allocated by av_bsf_alloc().
+ *
+ * @param      str String describing chain of bitstream filters in format
+ *                 `bsf1[=opt1=val1:opt2=val2][,bsf2]`
+ * @param[out] bsf Pointer to be set to newly created @ref AVBSFContext structure
+ *                 representing the chain of bitstream filters
+ *
+ * @return >=0 on success, negative AVERROR in case of failure
+ */
+av_bsf_list_parse_str(str: string,bsf: number): Promise<number>;
+/**
+ * Parse string describing list of bitstream filters and create single
+ * @ref AVBSFContext describing the whole chain of bitstream filters.
+ * Resulting @ref AVBSFContext can be treated as any other @ref AVBSFContext freshly
+ * allocated by av_bsf_alloc().
+ *
+ * @param      str String describing chain of bitstream filters in format
+ *                 `bsf1[=opt1=val1:opt2=val2][,bsf2]`
+ * @param[out] bsf Pointer to be set to newly created @ref AVBSFContext structure
+ *                 representing the chain of bitstream filters
+ *
+ * @return >=0 on success, negative AVERROR in case of failure
+ */
+av_bsf_list_parse_str_js(str: string): Promise<number>;
+/**
+ * Retrieve a filtered packet.
+ *
+ * @param ctx an initialized AVBSFContext
+ * @param[out] pkt this struct will be filled with the contents of the filtered
+ *                 packet. It is owned by the caller and must be freed using
+ *                 av_packet_unref() when it is no longer needed.
+ *                 This parameter should be "clean" (i.e. freshly allocated
+ *                 with av_packet_alloc() or unreffed with av_packet_unref())
+ *                 when this function is called. If this function returns
+ *                 successfully, the contents of pkt will be completely
+ *                 overwritten by the returned data. On failure, pkt is not
+ *                 touched.
  *
  * @return
- *         - >= 0 if a frame was successfully returned.
- *         - AVERROR(EAGAIN) if no frames are available at this point; more
- *           input frames must be added to the filtergraph to get more output.
- *         - AVERROR_EOF if there will be no more output frames on this sink.
- *         - A different negative AVERROR code in other failure cases.
+ *  - 0 on success.
+ *  - AVERROR(EAGAIN) if more packets need to be sent to the filter (using
+ *    av_bsf_send_packet()) to get more output.
+ *  - AVERROR_EOF if there will be no further output from the filter.
+ *  - Another negative AVERROR value if an error occurs.
+ *
+ * @note one input packet may result in several output packets, so after sending
+ * a packet with av_bsf_send_packet(), this function needs to be called
+ * repeatedly until it stops returning 0. It is also possible for a filter to
+ * output fewer packets than were sent to it, so this function may return
+ * AVERROR(EAGAIN) immediately after a successful av_bsf_send_packet() call.
  */
-av_buffersink_get_frame(ctx: number,frame: number): Promise<number>;
-av_buffersink_get_time_base_num(a0: number): Promise<number>;
-av_buffersink_get_time_base_den(a0: number): Promise<number>;
+av_bsf_receive_packet(ctx: number,pkt: number): Promise<number>;
 /**
- * Set the frame size for an audio buffer sink.
+ * Submit a packet for filtering.
  *
- * All calls to av_buffersink_get_buffer_ref will return a buffer with
- * exactly the specified number of samples, or AVERROR(EAGAIN) if there is
- * not enough. The last buffer at EOF will be padded with 0.
+ * After sending each packet, the filter must be completely drained by calling
+ * av_bsf_receive_packet() repeatedly until it returns AVERROR(EAGAIN) or
+ * AVERROR_EOF.
+ *
+ * @param ctx an initialized AVBSFContext
+ * @param pkt the packet to filter. The bitstream filter will take ownership of
+ * the packet and reset the contents of pkt. pkt is not touched if an error occurs.
+ * If pkt is empty (i.e. NULL, or pkt->data is NULL and pkt->side_data_elems zero),
+ * it signals the end of the stream (i.e. no more non-empty packets will be sent;
+ * sending more empty packets does nothing) and will cause the filter to output
+ * any packets it may have buffered internally.
+ *
+ * @return
+ *  - 0 on success.
+ *  - AVERROR(EAGAIN) if packets need to be retrieved from the filter (using
+ *    av_bsf_receive_packet()) before new input can be consumed.
+ *  - Another negative AVERROR value if an error occurs.
  */
-av_buffersink_set_frame_size(ctx: number,frame_size: number): Promise<void>;
-ff_buffersink_set_ch_layout(a0: number,a1: number,a2: number): Promise<number>;
+av_bsf_send_packet(ctx: number,pkt: number): Promise<number>;
+AVBSFContext_par_in(ptr: number): Promise<number>;
+AVBSFContext_par_in_s(ptr: number,val: number): Promise<void>;
+AVBSFContext_par_out(ptr: number): Promise<number>;
+AVBSFContext_par_out_s(ptr: number,val: number): Promise<void>;
+AVBSFContext_time_base_in_num(ptr: number): Promise<number>;
+AVBSFContext_time_base_in_den(ptr: number): Promise<number>;
+AVBSFContext_time_base_in_num_s(ptr: number,val: number): Promise<number>;
+AVBSFContext_time_base_in_den_s(ptr: number,val: number): Promise<number>;
+AVBSFContext_time_base_in_s(ptr: number,num: number,den: number): Promise<number>;
+AVBSFContext_time_base_out_num(ptr: number): Promise<number>;
+AVBSFContext_time_base_out_den(ptr: number): Promise<number>;
+AVBSFContext_time_base_out_num_s(ptr: number,val: number): Promise<number>;
+AVBSFContext_time_base_out_den_s(ptr: number,val: number): Promise<number>;
+AVBSFContext_time_base_out_s(ptr: number,num: number,den: number): Promise<number>;
+av_bsf_free_js(ptr: number): Promise<void>;
 /**
- * Add a frame to the buffer source.
- *
- * By default, if the frame is reference-counted, this function will take
- * ownership of the reference(s) and reset the frame. This can be controlled
- * using the flags.
- *
- * If this function returns an error, the input frame is not touched.
- *
- * @param buffer_src  pointer to a buffer source context
- * @param frame       a frame, or NULL to mark EOF
- * @param flags       a combination of AV_BUFFERSRC_FLAG_*
- * @return            >= 0 in case of success, a negative AVERROR code
- *                    in case of failure
+ * Bitstream-filter some number of packets.
+ * @param bsf  AVBSFContext(s), input
+ * @param pktPtr  AVPacket
+ * @param inPackets  Input packets
+ * @param config  Options. May be "true" to indicate end of stream.
  */
-av_buffersrc_add_frame_flags(buffer_src: number,frame: number,flags: number): Promise<number>;
+ff_bsf_multi(
+    bsf: number, pktPtr: number, inPackets: (Packet | number)[],
+    config?: boolean | {
+        fin?: boolean,
+        copyoutPacket?: "default"
+    }
+): Promise<Packet[]>
+ff_bsf_multi(
+    bsf: number, pktPtr: number, inPackets: (Packet | number)[],
+    config?: boolean | {
+        fin?: boolean,
+        copyoutPacket: "ptr"
+    }
+): Promise<number[]>;
 /**
- * Free a filter context. This will also remove the filter from its
- * filtergraph's list of filters.
+ * Find the "best" stream in the file.
+ * The best stream is determined according to various heuristics as the most
+ * likely to be what the user expects.
+ * If the decoder parameter is non-NULL, av_find_best_stream will find the
+ * default decoder for the stream's codec; streams for which no decoder can
+ * be found are ignored.
  *
- * @param filter the filter to free
+ * @param ic                media file handle
+ * @param type              stream type: video, audio, subtitles, etc.
+ * @param wanted_stream_nb  user-requested stream number,
+ *                          or -1 for automatic selection
+ * @param related_stream    try to find a stream related (eg. in the same
+ *                          program) to this one, or -1 if none
+ * @param decoder_ret       if non-NULL, returns the decoder for the
+ *                          selected stream
+ * @param flags             flags; none are currently defined
+ *
+ * @return  the non-negative stream number in case of success,
+ *          AVERROR_STREAM_NOT_FOUND if no stream with the requested type
+ *          could be found,
+ *          AVERROR_DECODER_NOT_FOUND if streams were found but no decoder
+ *
+ * @note  If av_find_best_stream returns successfully and decoder_ret is not
+ *        NULL, then *decoder_ret is guaranteed to be set to a valid AVCodec.
  */
-avfilter_free(filter: number): Promise<void>;
+av_find_best_stream(ic: number,type: number,wanted_stream_nb: number,related_stream: number,decoder_ret: number,flags: number): Promise<number>;
 /**
- * Get a filter definition matching the given name.
- *
- * @param name the filter name to find
- * @return     the filter definition, if any matching one is registered.
- *             NULL if none found.
+ * Find AVInputFormat based on the short name of the input format.
  */
-avfilter_get_by_name(name: string): Promise<number>;
+av_find_input_format(short_name: string): Promise<number>;
 /**
- * Allocate a filter graph.
- *
- * @return the allocated filter graph on success or NULL.
+ * Allocate an AVFormatContext.
+ * avformat_free_context() can be used to free the context and everything
+ * allocated by the framework within it.
  */
-avfilter_graph_alloc(): Promise<number>;
+avformat_alloc_context(): Promise<number>;
 /**
- * Check validity and configure all the links and formats in the graph.
+ * Allocate an AVFormatContext for an output format.
+ * avformat_free_context() can be used to free the context and
+ * everything allocated by the framework within it.
  *
- * @param graphctx the filter graph
- * @param log_ctx context used for logging
- * @return >= 0 in case of success, a negative AVERROR code otherwise
+ * @param ctx           pointee is set to the created format context,
+ *                      or to NULL in case of failure
+ * @param oformat       format to use for allocating the context, if NULL
+ *                      format_name and filename are used instead
+ * @param format_name   the name of output format to use for allocating the
+ *                      context, if NULL filename is used instead
+ * @param filename      the name of the filename to use for allocating the
+ *                      context, may be NULL
+ *
+ * @return  >= 0 in case of success, a negative AVERROR code in case of
+ *          failure
  */
-avfilter_graph_config(graphctx: number,log_ctx: number): Promise<number>;
+avformat_alloc_output_context2_js(ctx: number,oformat: string,format_name: string): Promise<number>;
 /**
- * Create and add a filter instance into an existing graph.
- * The filter instance is created from the filter filt and inited
- * with the parameter args. opaque is currently ignored.
- *
- * In case of success put in *filt_ctx the pointer to the created
- * filter instance, otherwise set *filt_ctx to NULL.
- *
- * @param name the instance name to give to the created filter instance
- * @param graph_ctx the filter graph
- * @return a negative AVERROR error code in case of failure, a non
- * negative value otherwise
+ * Close an opened input AVFormatContext. Free it and all its contents
+ * and set *s to NULL.
  */
-avfilter_graph_create_filter_js(filt_ctx: number,filt: string,name: string,args: number,opaque: number): Promise<number>;
+avformat_close_input(s: number): Promise<void>;
 /**
- * Free a graph, destroy its links, and set *graph to NULL.
- * If *graph is NULL, do nothing.
- */
-avfilter_graph_free(graph: number): Promise<void>;
-/**
- * Add a graph described by a string to a graph.
+ * Read packets of a media file to get stream information. This
+ * is useful for file formats with no headers such as MPEG. This
+ * function also computes the real framerate in case of MPEG-2 repeat
+ * frame mode.
+ * The logical file position is not changed by this function;
+ * examined packets may be buffered for later processing.
  *
- * @note The caller must provide the lists of inputs and outputs,
- * which therefore must be known before calling the function.
+ * @param ic media file handle
+ * @param options  If non-NULL, an ic.nb_streams long array of pointers to
+ *                 dictionaries, where i-th member contains options for
+ *                 codec corresponding to i-th stream.
+ *                 On return each dictionary will be filled with options that were not found.
+ * @return >=0 if OK, AVERROR_xxx on error
  *
- * @note The inputs parameter describes inputs of the already existing
- * part of the graph; i.e. from the point of view of the newly created
- * part, they are outputs. Similarly the outputs parameter describes
- * outputs of the already existing filters, which are provided as
- * inputs to the parsed filters.
+ * @note this function isn't guaranteed to open all the codecs, so
+ *       options being non-empty at return is a perfectly normal behavior.
  *
- * @param graph   the filter graph where to link the parsed graph context
- * @param filters string to be parsed
- * @param inputs  linked list to the inputs of the graph
- * @param outputs linked list to the outputs of the graph
- * @return zero on success, a negative AVERROR code on error
+ * @todo Let the user decide somehow what information is needed so that
+ *       we do not waste time getting stuff the user does not need.
  */
-avfilter_graph_parse(graph: number,filters: string,inputs: number,outputs: number,log_ctx: number): Promise<number>;
+avformat_find_stream_info(ic: number,options: number): Promise<number>;
 /**
- * Allocate a single AVFilterInOut entry.
- * Must be freed with avfilter_inout_free().
- * @return allocated AVFilterInOut on success, NULL on failure.
- */
-avfilter_inout_alloc(): Promise<number>;
-/**
- * Free the supplied list of AVFilterInOut and set *inout to NULL.
- * If *inout is NULL, do nothing.
- */
-avfilter_inout_free(inout: number): Promise<void>;
-/**
- * Link two filters together.
+ * Discard all internally buffered data. This can be useful when dealing with
+ * discontinuities in the byte stream. Generally works only with formats that
+ * can resync. This includes headerless formats like MPEG-TS/TS but should also
+ * work with NUT, Ogg and in a limited way AVI for example.
  *
- * @param src    the source filter
- * @param srcpad index of the output pad on the source filter
- * @param dst    the destination filter
- * @param dstpad index of the input pad on the destination filter
- * @return       zero on success
+ * The set of streams, the detected duration, stream parameters and codecs do
+ * not change when calling this function. If you want a complete reset, it's
+ * better to open a new AVFormatContext.
+ *
+ * This does not flush the AVIOContext (s->pb). If necessary, call
+ * avio_flush(s->pb) before calling this function.
+ *
+ * @param s media file handle
+ * @return >=0 on success, error code otherwise
  */
-avfilter_link(src: number,srcpad: number,dst: number,dstpad: number): Promise<number>;
+avformat_flush(s: number): Promise<number>;
+/**
+ * Free an AVFormatContext and all its streams.
+ * @param s context to free
+ */
+avformat_free_context(s: number): Promise<void>;
+/**
+ * Add a new stream to a media file.
+ *
+ * When demuxing, it is called by the demuxer in read_header(). If the
+ * flag AVFMTCTX_NOHEADER is set in s.ctx_flags, then it may also
+ * be called in read_packet().
+ *
+ * When muxing, should be called by the user before avformat_write_header().
+ *
+ * User is required to call avformat_free_context() to clean up the allocation
+ * by avformat_new_stream().
+ *
+ * @param s media file handle
+ * @param c unused, does nothing
+ *
+ * @return newly created stream or NULL on error.
+ */
+avformat_new_stream(s: number,c: number): Promise<number>;
+/**
+ * Open an input stream and read the header. The codecs are not opened.
+ * The stream must be closed with avformat_close_input().
+ *
+ * @param ps       Pointer to user-supplied AVFormatContext (allocated by
+ *                 avformat_alloc_context). May be a pointer to NULL, in
+ *                 which case an AVFormatContext is allocated by this
+ *                 function and written into ps.
+ *                 Note that a user-supplied AVFormatContext will be freed
+ *                 on failure.
+ * @param url      URL of the stream to open.
+ * @param fmt      If non-NULL, this parameter forces a specific input format.
+ *                 Otherwise the format is autodetected.
+ * @param options  A dictionary filled with AVFormatContext and demuxer-private
+ *                 options.
+ *                 On return this parameter will be destroyed and replaced with
+ *                 a dict containing options that were not found. May be NULL.
+ *
+ * @return 0 on success, a negative AVERROR on failure.
+ *
+ * @note If you want to use custom IO, preallocate the format context and set its pb field.
+ */
+avformat_open_input(ps: number,url: string,fmt: number,options: number): Promise<number>;
+/**
+ * Open an input stream and read the header. The codecs are not opened.
+ * The stream must be closed with avformat_close_input().
+ *
+ * @param ps       Pointer to user-supplied AVFormatContext (allocated by
+ *                 avformat_alloc_context). May be a pointer to NULL, in
+ *                 which case an AVFormatContext is allocated by this
+ *                 function and written into ps.
+ *                 Note that a user-supplied AVFormatContext will be freed
+ *                 on failure.
+ * @param url      URL of the stream to open.
+ * @param fmt      If non-NULL, this parameter forces a specific input format.
+ *                 Otherwise the format is autodetected.
+ * @param options  A dictionary filled with AVFormatContext and demuxer-private
+ *                 options.
+ *                 On return this parameter will be destroyed and replaced with
+ *                 a dict containing options that were not found. May be NULL.
+ *
+ * @return 0 on success, a negative AVERROR on failure.
+ *
+ * @note If you want to use custom IO, preallocate the format context and set its pb field.
+ */
+avformat_open_input_js(ps: string,url: number,fmt: number): Promise<number>;
+/**
+ * Allocate the stream private data and write the stream header to
+ * an output media file.
+ *
+ * @param s        Media file handle, must be allocated with
+ *                 avformat_alloc_context().
+ *                 Its \ref AVFormatContext.oformat "oformat" field must be set
+ *                 to the desired output format;
+ *                 Its \ref AVFormatContext.pb "pb" field must be set to an
+ *                 already opened ::AVIOContext.
+ * @param options  An ::AVDictionary filled with AVFormatContext and
+ *                 muxer-private options.
+ *                 On return this parameter will be destroyed and replaced with
+ *                 a dict containing options that were not found. May be NULL.
+ *
+ * @retval AVSTREAM_INIT_IN_WRITE_HEADER On success, if the codec had not already been
+ *                                       fully initialized in avformat_init_output().
+ * @retval AVSTREAM_INIT_IN_INIT_OUTPUT  On success, if the codec had already been fully
+ *                                       initialized in avformat_init_output().
+ * @retval AVERROR                       A negative AVERROR on failure.
+ *
+ * @see av_opt_find, av_dict_set, avio_open, av_oformat_next, avformat_init_output.
+ */
+avformat_write_header(s: number,options: number): Promise<number>;
+/**
+ * Write a packet to an output media file ensuring correct interleaving.
+ *
+ * This function will buffer the packets internally as needed to make sure the
+ * packets in the output file are properly interleaved, usually ordered by
+ * increasing dts. Callers doing their own interleaving should call
+ * av_write_frame() instead of this function.
+ *
+ * Using this function instead of av_write_frame() can give muxers advance
+ * knowledge of future packets, improving e.g. the behaviour of the mp4
+ * muxer for VFR content in fragmenting mode.
+ *
+ * @param s media file handle
+ * @param pkt The packet containing the data to be written.
+ *            <br>
+ *            If the packet is reference-counted, this function will take
+ *            ownership of this reference and unreference it later when it sees
+ *            fit. If the packet is not reference-counted, libavformat will
+ *            make a copy.
+ *            The returned packet will be blank (as if returned from
+ *            av_packet_alloc()), even on error.
+ *            <br>
+ *            This parameter can be NULL (at any time, not just at the end), to
+ *            flush the interleaving queues.
+ *            <br>
+ *            Packet's @ref AVPacket.stream_index "stream_index" field must be
+ *            set to the index of the corresponding stream in @ref
+ *            AVFormatContext.streams "s->streams".
+ *            <br>
+ *            The timestamps (@ref AVPacket.pts "pts", @ref AVPacket.dts "dts")
+ *            must be set to correct values in the stream's timebase (unless the
+ *            output format is flagged with the AVFMT_NOTIMESTAMPS flag, then
+ *            they can be set to AV_NOPTS_VALUE).
+ *            The dts for subsequent packets in one stream must be strictly
+ *            increasing (unless the output format is flagged with the
+ *            AVFMT_TS_NONSTRICT, then they merely have to be nondecreasing).
+ *            @ref AVPacket.duration "duration" should also be set if known.
+ *
+ * @return 0 on success, a negative AVERROR on error.
+ *
+ * @see av_write_frame(), AVFormatContext.max_interleave_delta
+ */
+av_interleaved_write_frame(s: number,pkt: number): Promise<number>;
+/**
+ * Create and initialize a AVIOContext for accessing the
+ * resource indicated by url.
+ * @note When the resource indicated by url has been opened in
+ * read+write mode, the AVIOContext can be used only for writing.
+ *
+ * @param s Used to return the pointer to the created AVIOContext.
+ * In case of failure the pointed to value is set to NULL.
+ * @param url resource to access
+ * @param flags flags which control how the resource indicated by url
+ * is to be opened
+ * @param int_cb an interrupt callback to be used at the protocols level
+ * @param options  A dictionary filled with protocol-private options. On return
+ * this parameter will be destroyed and replaced with a dict containing options
+ * that were not found. May be NULL.
+ * @return >= 0 in case of success, a negative value corresponding to an
+ * AVERROR code in case of failure
+ */
+avio_open2_js(s: string,url: number,flags: number,int_cb: number): Promise<number>;
+/**
+ * Close the resource accessed by the AVIOContext s and free it.
+ * This function can only be used if s was opened by avio_open().
+ *
+ * The internal buffer is automatically flushed before closing the
+ * resource.
+ *
+ * @return 0 on success, an AVERROR < 0 on error.
+ * @see avio_closep
+ */
+avio_close(s: number): Promise<number>;
+/**
+ * Force flushing of buffered data.
+ *
+ * For write streams, force the buffered data to be immediately written to the output,
+ * without to wait to fill the internal buffer.
+ *
+ * For read streams, discard all currently buffered data, and advance the
+ * reported file position to that of the underlying stream. This does not
+ * read new data, and does not perform any seeks.
+ */
+avio_flush(s: number): Promise<void>;
+/**
+ * Return the next frame of a stream.
+ * This function returns what is stored in the file, and does not validate
+ * that what is there are valid frames for the decoder. It will split what is
+ * stored in the file into frames and return one for each call. It will not
+ * omit invalid data between valid frames so as to give the decoder the maximum
+ * information possible for decoding.
+ *
+ * On success, the returned packet is reference-counted (pkt->buf is set) and
+ * valid indefinitely. The packet must be freed with av_packet_unref() when
+ * it is no longer needed. For video, the packet contains exactly one frame.
+ * For audio, it contains an integer number of frames if each frame has
+ * a known fixed size (e.g. PCM or ADPCM data). If the audio frames have
+ * a variable size (e.g. MPEG audio), then it contains one frame.
+ *
+ * pkt->pts, pkt->dts and pkt->duration are always set to correct
+ * values in AVStream.time_base units (and guessed if the format cannot
+ * provide them). pkt->pts can be AV_NOPTS_VALUE if the video format
+ * has B-frames, so it is better to rely on pkt->dts if you do not
+ * decompress the payload.
+ *
+ * @return 0 if OK, < 0 on error or end of file. On error, pkt will be blank
+ *         (as if it came from av_packet_alloc()).
+ *
+ * @note pkt will be initialized, so it may be uninitialized, but it must not
+ *       contain data that needs to be freed.
+ */
+av_read_frame(s: number,pkt: number): Promise<number>;
+/**
+ * Write a packet to an output media file.
+ *
+ * This function passes the packet directly to the muxer, without any buffering
+ * or reordering. The caller is responsible for correctly interleaving the
+ * packets if the format requires it. Callers that want libavformat to handle
+ * the interleaving should call av_interleaved_write_frame() instead of this
+ * function.
+ *
+ * @param s media file handle
+ * @param pkt The packet containing the data to be written. Note that unlike
+ *            av_interleaved_write_frame(), this function does not take
+ *            ownership of the packet passed to it (though some muxers may make
+ *            an internal reference to the input packet).
+ *            <br>
+ *            This parameter can be NULL (at any time, not just at the end), in
+ *            order to immediately flush data buffered within the muxer, for
+ *            muxers that buffer up data internally before writing it to the
+ *            output.
+ *            <br>
+ *            Packet's @ref AVPacket.stream_index "stream_index" field must be
+ *            set to the index of the corresponding stream in @ref
+ *            AVFormatContext.streams "s->streams".
+ *            <br>
+ *            The timestamps (@ref AVPacket.pts "pts", @ref AVPacket.dts "dts")
+ *            must be set to correct values in the stream's timebase (unless the
+ *            output format is flagged with the AVFMT_NOTIMESTAMPS flag, then
+ *            they can be set to AV_NOPTS_VALUE).
+ *            The dts for subsequent packets passed to this function must be strictly
+ *            increasing when compared in their respective timebases (unless the
+ *            output format is flagged with the AVFMT_TS_NONSTRICT, then they
+ *            merely have to be nondecreasing).  @ref AVPacket.duration
+ *            "duration") should also be set if known.
+ * @return < 0 on error, = 0 if OK, 1 if flushed and there is no more data to flush
+ *
+ * @see av_interleaved_write_frame()
+ */
+av_write_frame(s: number,pkt: number): Promise<number>;
+/**
+ * Write the stream trailer to an output media file and free the
+ * file private data.
+ *
+ * May only be called after a successful call to avformat_write_header.
+ *
+ * @param s media file handle
+ * @return 0 if OK, AVERROR_xxx on error
+ */
+av_write_trailer(s: number): Promise<number>;
+LIBAVFORMAT_VERSION_INT(): Promise<number>;
+AVFormatContext_duration(ptr: number): Promise<number>;
+AVFormatContext_duration_s(ptr: number,val: number): Promise<void>;
+AVFormatContext_durationhi(ptr: number): Promise<number>;
+AVFormatContext_durationhi_s(ptr: number,val: number): Promise<void>;
+AVFormatContext_flags(ptr: number): Promise<number>;
+AVFormatContext_flags_s(ptr: number,val: number): Promise<void>;
+AVFormatContext_nb_streams(ptr: number): Promise<number>;
+AVFormatContext_nb_streams_s(ptr: number,val: number): Promise<void>;
+AVFormatContext_oformat(ptr: number): Promise<number>;
+AVFormatContext_oformat_s(ptr: number,val: number): Promise<void>;
+AVFormatContext_pb(ptr: number): Promise<number>;
+AVFormatContext_pb_s(ptr: number,val: number): Promise<void>;
+AVFormatContext_start_time(ptr: number): Promise<number>;
+AVFormatContext_start_time_s(ptr: number,val: number): Promise<void>;
+AVFormatContext_start_timehi(ptr: number): Promise<number>;
+AVFormatContext_start_timehi_s(ptr: number,val: number): Promise<void>;
+AVFormatContext_streams_a(ptr: number,idx: number): Promise<number>;
+AVFormatContext_streams_a_s(ptr: number,idx: number,val: number): Promise<void>;
+AVStream_codecpar(ptr: number): Promise<number>;
+AVStream_codecpar_s(ptr: number,val: number): Promise<void>;
+AVStream_discard(ptr: number): Promise<number>;
+AVStream_discard_s(ptr: number,val: number): Promise<void>;
+AVStream_duration(ptr: number): Promise<number>;
+AVStream_duration_s(ptr: number,val: number): Promise<void>;
+AVStream_durationhi(ptr: number): Promise<number>;
+AVStream_durationhi_s(ptr: number,val: number): Promise<void>;
+AVStream_time_base_num(ptr: number): Promise<number>;
+AVStream_time_base_den(ptr: number): Promise<number>;
+AVStream_time_base_num_s(ptr: number,val: number): Promise<number>;
+AVStream_time_base_den_s(ptr: number,val: number): Promise<number>;
+AVStream_time_base_s(ptr: number,num: number,den: number): Promise<number>;
+avformat_close_input_js(ptr: number): Promise<void>;
+/**
+ * Read a complete file from the in-memory filesystem.
+ * @param name  Filename to read
+ */
+readFile(name: string): Promise<Uint8Array>;
+/**
+ * Write a complete file to the in-memory filesystem.
+ * @param name  Filename to write
+ * @param content  Content to write to the file
+ */
+writeFile(name: string, content: Uint8Array): Promise<Uint8Array>;
+/**
+ * Delete a file in the in-memory filesystem.
+ * @param name  Filename to delete
+ */
+unlink(name: string): Promise<void>;
+/**
+ * Unmount a mounted filesystem.
+ * @param mountpoint  Path where the filesystem is mounted
+ */
+unmount(mountpoint: string): Promise<void>;
+/**
+ * Make a lazy file. Direct link to createLazyFile.
+ */
+createLazyFile(
+    parent: string, name: string, url: string, canRead: boolean,
+    canWrite: boolean
+): Promise<void>;
+/**
+ * Make a reader device.
+ * @param name  Filename to create.
+ * @param mode  Unix permissions (pointless since this is an in-memory
+ *              filesystem)
+ */
+mkreaderdev(name: string, mode?: number): Promise<void>;
+/**
+ * Make a block reader "device". Technically a file that we then hijack to have
+ * our behavior.
+ * @param name  Filename to create.
+ * @param size  Size of the device to present.
+ */
+mkblockreaderdev(name: string, size: number): Promise<void>;
+/**
+ * Make a readahead device. This reads a File (or other Blob) and attempts to
+ * read ahead of whatever libav actually asked for. Note that this overrides
+ * onblockread, so if you want to support both kinds of files, make sure you set
+ * onblockread before calling this.
+ * @param name  Filename to create.
+ * @param file  Blob or file to read.
+ */
+mkreadaheadfile(name: string, file: Blob): Promise<void>;
+/**
+ * Unlink a readahead file. Also gets rid of the File reference.
+ * @param name  Filename to unlink.
+ */
+unlinkreadaheadfile(name: string): Promise<void>;
+/**
+ * Make a writer device.
+ * @param name  Filename to create
+ * @param mode  Unix permissions
+ */
+mkwriterdev(name: string, mode?: number): Promise<void>;
+/**
+ * Make a stream writer device. The same as a writer device but does not allow
+ * seeking.
+ * @param name  Filename to create
+ * @param mode  Unix permissions
+ */
+mkstreamwriterdev(name: string, mode?: number): Promise<void>;
+/**
+ * Mount a writer *filesystem*. All files created in this filesystem will be
+ * redirected as writers. The directory will be created for you if it doesn't
+ * already exist, but it may already exist.
+ * @param mountpoint  Directory to mount as a writer filesystem
+ */
+mountwriterfs(mountpoint: string): Promise<void>;
+/**
+ * Make a workerfs file. Returns the filename that it's mounted to.
+ * @param name  Filename to use.
+ * @param blob  Blob to load at that file.
+ */
+mkworkerfsfile(name: string, blob: Blob): Promise<string>;
+/**
+ * Unmount (unmake) a workerfs file. Give the *original name you provided*, not
+ * the name mkworkerfsfile returned.
+ * @param name  Filename to unmount.
+ */
+unlinkworkerfsfile(name: string): Promise<void>;
+/**
+ * Make a FileSystemFileHandle device. This writes via a FileSystemFileHandle,
+ * synchronously if possible. Note that this overrides onwrite, so if you want
+ * to support both kinds of files, make sure you set onwrite before calling
+ * this.
+ * @param name  Filename to create.
+ * @param fsfh  FileSystemFileHandle corresponding to this filename.
+ */
+mkfsfhfile(name: string, fsfh: FileSystemFileHandle): Promise<void>;
+/**
+ * Unlink a FileSystemFileHandle file. Also closes the file handle.
+ * @param name  Filename to unlink.
+ */
+unlinkfsfhfile(name: string): Promise<void>;
+/**
+ * Send some data to a reader device. To indicate EOF, send null. To indicate an
+ * error, send EOF and include an error code in the options.
+ * @param name  Filename of the reader device.
+ * @param data  Data to send.
+ * @param opts  Optional send options, such as an error code.
+ */
+ff_reader_dev_send(
+    name: string, data: Uint8Array | null,
+    opts?: {
+        errorCode?: number,
+        error?: any // any other error, used internally
+    }
+): Promise<void>;
+/**
+ * Send some data to a block reader device. To indicate EOF, send null (but note
+ * that block read devices have a fixed size, and will automatically send EOF
+ * for reads outside of that size, so you should not normally need to send EOF).
+ * To indicate an error, send EOF and include an error code in the options.
+ * @param name  Filename of the reader device.
+ * @param pos  Position of the data in the file.
+ * @param data  Data to send.
+ * @param opts  Optional send options, such as an error code.
+ */
+ff_block_reader_dev_send(
+    name: string, pos: number, data: Uint8Array | null,
+    opts?: {
+        errorCode?: number,
+        error?: any // any other error, used internally
+    }
+): Promise<void>;
+/**
+ * @deprecated
+ * DEPRECATED. Use the onread callback.
+ * Metafunction to determine whether any device has any waiters. This can be
+ * used to determine whether more data needs to be sent before a previous step
+ * will be fully resolved.
+ * @param name  Optional name of file to check for waiters
+ */
+ff_reader_dev_waiting(name?: string): Promise<boolean>;
+/**
+ * Initialize a muxer format, format context and some number of streams.
+ * Returns [AVFormatContext, AVOutputFormat, AVIOContext, AVStream[]]
+ * @param opts  Muxer options
+ * @param stramCtxs  Context info for each stream to mux
+ */
+ff_init_muxer(
+    opts: {
+        oformat?: number, // format pointer
+        format_name?: string, // libav name
+        filename?: string,
+        device?: boolean, // Create a writer device
+        open?: boolean, // Open the file for writing
+        codecpars?: boolean // Streams is in terms of codecpars, not codecctx
+    },
+    streamCtxs: [number, number, number][] // AVCodecContext | AVCodecParameters, time_base_num, time_base_den
+): Promise<[number, number, number, number[]]>;
+/**
+ * Free up a muxer format and/or file
+ * @param oc  AVFormatContext
+ * @param pb  AVIOContext
+ */
+ff_free_muxer(oc: number, pb: number): Promise<void>;
+/**
+ * Initialize a demuxer from a file and format context, and get the list of
+ * codecs/types.
+ * Returns [AVFormatContext, Stream[]]
+ * @param filename  Filename to open
+ * @param fmt  Format to use (optional)
+ */
+ff_init_demuxer_file(
+    filename: string, fmt?: string
+): Promise<[number, Stream[]]>;
+/**
+ * Write some number of packets at once.
+ * @param oc  AVFormatContext
+ * @param pkt  AVPacket
+ * @param inPackets  Packets to write
+ * @param interleave  Set to false to *not* use the interleaved writer.
+ *                    Interleaving is the default.
+ */
+ff_write_multi(
+    oc: number, pkt: number, inPackets: (Packet | number)[], interleave?: boolean
+): Promise<void>;
+/**
+ * Read many packets at once. If you don't set any limits, this function will
+ * block (asynchronously) until the whole file is read, so make sure you set
+ * some limits if you want to read a bit at a time. Returns a pair [result,
+ * packets], where the result indicates whether an error was encountered, an
+ * EOF, or simply limits (EAGAIN), and packets is a dictionary indexed by the
+ * stream number in which each element is an array of packets from that stream.
+ * @param fmt_ctx  AVFormatContext
+ * @param pkt  AVPacket
+ * @param opts  Other options
+ */
+ff_read_frame_multi(
+    fmt_ctx: number, pkt: number, opts?: {
+        limit?: number, // OUTPUT limit, in bytes
+        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
+        copyoutPacket?: "default" // Version of ff_copyout_packet to use
+    }
+): Promise<[number, Record<number, Packet[]>]>
+ff_read_frame_multi(
+    fmt_ctx: number, pkt: number, opts: {
+        limit?: number, // OUTPUT limit, in bytes
+        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
+        copyoutPacket: "ptr" // Version of ff_copyout_packet to use
+    }
+): Promise<[number, Record<number, number[]>]>;
+/**
+ * @deprecated
+ * DEPRECATED. Use `ff_read_frame_multi`.
+ * Read many packets at once. This older API is now deprecated. The devfile
+ * parameter is unused and unsupported. Dev files should be used via the normal
+ * `ff_reader_dev_waiting` API, rather than counting on device file limits, as
+ * this function used to.
+ * @param fmt_ctx  AVFormatContext
+ * @param pkt  AVPacket
+ * @param devfile  Unused
+ * @param opts  Other options
+ */
+ff_read_multi(
+    fmt_ctx: number, pkt: number, devfile?: string | null, opts?: {
+        limit?: number, // OUTPUT limit, in bytes
+        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
+        copyoutPacket?: "default" // Version of ff_copyout_packet to use
+    }
+): Promise<[number, Record<number, Packet[]>]>
+ff_read_multi(
+    fmt_ctx: number, pkt: number, devfile: string | null, opts: {
+        limit?: number, // OUTPUT limit, in bytes
+        devLimit?: number, // INPUT limit, in bytes (don't read if less than this much data is available)
+        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
+        copyoutPacket: "ptr" // Version of ff_copyout_packet to use
+    }
+): Promise<[number, Record<number, number[]>]>;
 /**
  * Allocate an AVCodecContext and set its fields to default values. The
  * resulting struct should be freed with avcodec_free_context().
@@ -951,37 +1971,6 @@ avfilter_link(src: number,srcpad: number,dst: number,dstpad: number): Promise<nu
  * @return An AVCodecContext filled with default values or NULL on failure.
  */
 avcodec_alloc_context3(codec: number): Promise<number>;
-/**
- * Close a given AVCodecContext and free all the data associated with it
- * (but not the AVCodecContext itself).
- *
- * Calling this function on an AVCodecContext that hasn't been opened will free
- * the codec-specific data allocated in avcodec_alloc_context3() with a non-NULL
- * codec. Subsequent calls will do nothing.
- *
- * @deprecated Do not use this function. Use avcodec_free_context() to destroy a
- * codec context (either open or closed). Opening and closing a codec context
- * multiple times is not supported anymore -- use multiple codec contexts
- * instead.
- */
-avcodec_close(avctx: number): Promise<number>;
-/**
- * @return descriptor for given codec ID or NULL if no descriptor exists.
- */
-avcodec_descriptor_get(id: number): Promise<number>;
-/**
- * @return codec descriptor with the given name or NULL if no such descriptor
- *         exists.
- */
-avcodec_descriptor_get_by_name(name: string): Promise<number>;
-/**
- * Iterate over all codec descriptors known to libavcodec.
- *
- * @param prev previous descriptor. NULL to get the first descriptor.
- *
- * @return next descriptor or NULL after the last descriptor
- */
-avcodec_descriptor_next(prev: number): Promise<number>;
 /**
  * Find a registered decoder with a matching codec ID.
  *
@@ -1010,6 +1999,21 @@ avcodec_find_encoder(id: number): Promise<number>;
  * @return An encoder if one was found, NULL otherwise.
  */
 avcodec_find_encoder_by_name(name: string): Promise<number>;
+/**
+ * Reset the internal codec state / flush internal buffers. Should be called
+ * e.g. when seeking or when switching to a different stream.
+ *
+ * @note for decoders, this function just releases any references the decoder
+ * might keep internally, but the caller's references remain valid.
+ *
+ * @note for encoders, this function will only do something if the encoder
+ * declares support for AV_CODEC_CAP_ENCODER_FLUSH. When called, the encoder
+ * will drain any remaining packets, and can then be re-used for a different
+ * stream (as opposed to sending a null frame which will leave the encoder
+ * in a permanent EOF state after draining). This can be desirable if the
+ * cost of tearing down and replacing the encoder instance is high.
+ */
+avcodec_flush_buffers(avctx: number): Promise<void>;
 /**
  * Free the codec context and everything associated with it and write NULL to
  * the provided pointer.
@@ -1297,919 +2301,102 @@ avcodec_send_frame(avctx: number,frame: number): Promise<number>;
  * @retval "another negative error code" legitimate decoding errors
  */
 avcodec_send_packet(avctx: number,avpkt: number): Promise<number>;
-/**
- * Find AVInputFormat based on the short name of the input format.
- */
-av_find_input_format(short_name: string): Promise<number>;
-/**
- * Allocate an AVFormatContext.
- * avformat_free_context() can be used to free the context and everything
- * allocated by the framework within it.
- */
-avformat_alloc_context(): Promise<number>;
-/**
- * Allocate an AVFormatContext for an output format.
- * avformat_free_context() can be used to free the context and
- * everything allocated by the framework within it.
- *
- * @param ctx           pointee is set to the created format context,
- *                      or to NULL in case of failure
- * @param oformat       format to use for allocating the context, if NULL
- *                      format_name and filename are used instead
- * @param format_name   the name of output format to use for allocating the
- *                      context, if NULL filename is used instead
- * @param filename      the name of the filename to use for allocating the
- *                      context, may be NULL
- *
- * @return  >= 0 in case of success, a negative AVERROR code in case of
- *          failure
- */
-avformat_alloc_output_context2_js(ctx: number,oformat: string,format_name: string): Promise<number>;
-/**
- * Close an opened input AVFormatContext. Free it and all its contents
- * and set *s to NULL.
- */
-avformat_close_input(s: number): Promise<void>;
-/**
- * Read packets of a media file to get stream information. This
- * is useful for file formats with no headers such as MPEG. This
- * function also computes the real framerate in case of MPEG-2 repeat
- * frame mode.
- * The logical file position is not changed by this function;
- * examined packets may be buffered for later processing.
- *
- * @param ic media file handle
- * @param options  If non-NULL, an ic.nb_streams long array of pointers to
- *                 dictionaries, where i-th member contains options for
- *                 codec corresponding to i-th stream.
- *                 On return each dictionary will be filled with options that were not found.
- * @return >=0 if OK, AVERROR_xxx on error
- *
- * @note this function isn't guaranteed to open all the codecs, so
- *       options being non-empty at return is a perfectly normal behavior.
- *
- * @todo Let the user decide somehow what information is needed so that
- *       we do not waste time getting stuff the user does not need.
- */
-avformat_find_stream_info(ic: number,options: number): Promise<number>;
-/**
- * Discard all internally buffered data. This can be useful when dealing with
- * discontinuities in the byte stream. Generally works only with formats that
- * can resync. This includes headerless formats like MPEG-TS/TS but should also
- * work with NUT, Ogg and in a limited way AVI for example.
- *
- * The set of streams, the detected duration, stream parameters and codecs do
- * not change when calling this function. If you want a complete reset, it's
- * better to open a new AVFormatContext.
- *
- * This does not flush the AVIOContext (s->pb). If necessary, call
- * avio_flush(s->pb) before calling this function.
- *
- * @param s media file handle
- * @return >=0 on success, error code otherwise
- */
-avformat_flush(s: number): Promise<number>;
-/**
- * Free an AVFormatContext and all its streams.
- * @param s context to free
- */
-avformat_free_context(s: number): Promise<void>;
-/**
- * Add a new stream to a media file.
- *
- * When demuxing, it is called by the demuxer in read_header(). If the
- * flag AVFMTCTX_NOHEADER is set in s.ctx_flags, then it may also
- * be called in read_packet().
- *
- * When muxing, should be called by the user before avformat_write_header().
- *
- * User is required to call avformat_free_context() to clean up the allocation
- * by avformat_new_stream().
- *
- * @param s media file handle
- * @param c unused, does nothing
- *
- * @return newly created stream or NULL on error.
- */
-avformat_new_stream(s: number,c: number): Promise<number>;
-/**
- * Open an input stream and read the header. The codecs are not opened.
- * The stream must be closed with avformat_close_input().
- *
- * @param ps       Pointer to user-supplied AVFormatContext (allocated by
- *                 avformat_alloc_context). May be a pointer to NULL, in
- *                 which case an AVFormatContext is allocated by this
- *                 function and written into ps.
- *                 Note that a user-supplied AVFormatContext will be freed
- *                 on failure.
- * @param url      URL of the stream to open.
- * @param fmt      If non-NULL, this parameter forces a specific input format.
- *                 Otherwise the format is autodetected.
- * @param options  A dictionary filled with AVFormatContext and demuxer-private
- *                 options.
- *                 On return this parameter will be destroyed and replaced with
- *                 a dict containing options that were not found. May be NULL.
- *
- * @return 0 on success, a negative AVERROR on failure.
- *
- * @note If you want to use custom IO, preallocate the format context and set its pb field.
- */
-avformat_open_input(ps: number,url: string,fmt: number,options: number): Promise<number>;
-/**
- * Open an input stream and read the header. The codecs are not opened.
- * The stream must be closed with avformat_close_input().
- *
- * @param ps       Pointer to user-supplied AVFormatContext (allocated by
- *                 avformat_alloc_context). May be a pointer to NULL, in
- *                 which case an AVFormatContext is allocated by this
- *                 function and written into ps.
- *                 Note that a user-supplied AVFormatContext will be freed
- *                 on failure.
- * @param url      URL of the stream to open.
- * @param fmt      If non-NULL, this parameter forces a specific input format.
- *                 Otherwise the format is autodetected.
- * @param options  A dictionary filled with AVFormatContext and demuxer-private
- *                 options.
- *                 On return this parameter will be destroyed and replaced with
- *                 a dict containing options that were not found. May be NULL.
- *
- * @return 0 on success, a negative AVERROR on failure.
- *
- * @note If you want to use custom IO, preallocate the format context and set its pb field.
- */
-avformat_open_input_js(ps: string,url: number,fmt: number): Promise<number>;
-/**
- * Allocate the stream private data and write the stream header to
- * an output media file.
- *
- * @param s        Media file handle, must be allocated with
- *                 avformat_alloc_context().
- *                 Its \ref AVFormatContext.oformat "oformat" field must be set
- *                 to the desired output format;
- *                 Its \ref AVFormatContext.pb "pb" field must be set to an
- *                 already opened ::AVIOContext.
- * @param options  An ::AVDictionary filled with AVFormatContext and
- *                 muxer-private options.
- *                 On return this parameter will be destroyed and replaced with
- *                 a dict containing options that were not found. May be NULL.
- *
- * @retval AVSTREAM_INIT_IN_WRITE_HEADER On success, if the codec had not already been
- *                                       fully initialized in avformat_init_output().
- * @retval AVSTREAM_INIT_IN_INIT_OUTPUT  On success, if the codec had already been fully
- *                                       initialized in avformat_init_output().
- * @retval AVERROR                       A negative AVERROR on failure.
- *
- * @see av_opt_find, av_dict_set, avio_open, av_oformat_next, avformat_init_output.
- */
-avformat_write_header(s: number,options: number): Promise<number>;
-/**
- * Create and initialize a AVIOContext for accessing the
- * resource indicated by url.
- * @note When the resource indicated by url has been opened in
- * read+write mode, the AVIOContext can be used only for writing.
- *
- * @param s Used to return the pointer to the created AVIOContext.
- * In case of failure the pointed to value is set to NULL.
- * @param url resource to access
- * @param flags flags which control how the resource indicated by url
- * is to be opened
- * @param int_cb an interrupt callback to be used at the protocols level
- * @param options  A dictionary filled with protocol-private options. On return
- * this parameter will be destroyed and replaced with a dict containing options
- * that were not found. May be NULL.
- * @return >= 0 in case of success, a negative value corresponding to an
- * AVERROR code in case of failure
- */
-avio_open2_js(s: string,url: number,flags: number,int_cb: number): Promise<number>;
-/**
- * Close the resource accessed by the AVIOContext s and free it.
- * This function can only be used if s was opened by avio_open().
- *
- * The internal buffer is automatically flushed before closing the
- * resource.
- *
- * @return 0 on success, an AVERROR < 0 on error.
- * @see avio_closep
- */
-avio_close(s: number): Promise<number>;
-/**
- * Force flushing of buffered data.
- *
- * For write streams, force the buffered data to be immediately written to the output,
- * without to wait to fill the internal buffer.
- *
- * For read streams, discard all currently buffered data, and advance the
- * reported file position to that of the underlying stream. This does not
- * read new data, and does not perform any seeks.
- */
-avio_flush(s: number): Promise<void>;
-/**
- * Find the "best" stream in the file.
- * The best stream is determined according to various heuristics as the most
- * likely to be what the user expects.
- * If the decoder parameter is non-NULL, av_find_best_stream will find the
- * default decoder for the stream's codec; streams for which no decoder can
- * be found are ignored.
- *
- * @param ic                media file handle
- * @param type              stream type: video, audio, subtitles, etc.
- * @param wanted_stream_nb  user-requested stream number,
- *                          or -1 for automatic selection
- * @param related_stream    try to find a stream related (eg. in the same
- *                          program) to this one, or -1 if none
- * @param decoder_ret       if non-NULL, returns the decoder for the
- *                          selected stream
- * @param flags             flags; none are currently defined
- *
- * @return  the non-negative stream number in case of success,
- *          AVERROR_STREAM_NOT_FOUND if no stream with the requested type
- *          could be found,
- *          AVERROR_DECODER_NOT_FOUND if streams were found but no decoder
- *
- * @note  If av_find_best_stream returns successfully and decoder_ret is not
- *        NULL, then *decoder_ret is guaranteed to be set to a valid AVCodec.
- */
-av_find_best_stream(ic: number,type: number,wanted_stream_nb: number,related_stream: number,decoder_ret: number,flags: number): Promise<number>;
-/**
- * Return the name of sample_fmt, or NULL if sample_fmt is not
- * recognized.
- */
-av_get_sample_fmt_name(sample_fmt: number): Promise<string>;
-/**
- * Increase packet size, correctly zeroing padding
- *
- * @param pkt packet
- * @param grow_by number of bytes by which to increase the size of the packet
- */
-av_grow_packet(pkt: number,grow_by: number): Promise<number>;
-/**
- * Write a packet to an output media file ensuring correct interleaving.
- *
- * This function will buffer the packets internally as needed to make sure the
- * packets in the output file are properly interleaved, usually ordered by
- * increasing dts. Callers doing their own interleaving should call
- * av_write_frame() instead of this function.
- *
- * Using this function instead of av_write_frame() can give muxers advance
- * knowledge of future packets, improving e.g. the behaviour of the mp4
- * muxer for VFR content in fragmenting mode.
- *
- * @param s media file handle
- * @param pkt The packet containing the data to be written.
- *            <br>
- *            If the packet is reference-counted, this function will take
- *            ownership of this reference and unreference it later when it sees
- *            fit. If the packet is not reference-counted, libavformat will
- *            make a copy.
- *            The returned packet will be blank (as if returned from
- *            av_packet_alloc()), even on error.
- *            <br>
- *            This parameter can be NULL (at any time, not just at the end), to
- *            flush the interleaving queues.
- *            <br>
- *            Packet's @ref AVPacket.stream_index "stream_index" field must be
- *            set to the index of the corresponding stream in @ref
- *            AVFormatContext.streams "s->streams".
- *            <br>
- *            The timestamps (@ref AVPacket.pts "pts", @ref AVPacket.dts "dts")
- *            must be set to correct values in the stream's timebase (unless the
- *            output format is flagged with the AVFMT_NOTIMESTAMPS flag, then
- *            they can be set to AV_NOPTS_VALUE).
- *            The dts for subsequent packets in one stream must be strictly
- *            increasing (unless the output format is flagged with the
- *            AVFMT_TS_NONSTRICT, then they merely have to be nondecreasing).
- *            @ref AVPacket.duration "duration" should also be set if known.
- *
- * @return 0 on success, a negative AVERROR on error.
- *
- * @see av_write_frame(), AVFormatContext.max_interleave_delta
- */
-av_interleaved_write_frame(s: number,pkt: number): Promise<number>;
-/**
- * Create a writable reference for the data described by a given packet,
- * avoiding data copy if possible.
- *
- * @param pkt Packet whose data should be made writable.
- *
- * @return 0 on success, a negative AVERROR on failure. On failure, the
- *         packet is unchanged.
- */
-av_packet_make_writable(pkt: number): Promise<number>;
-/**
- * @return a pixel format descriptor for provided pixel format or NULL if
- * this pixel format is unknown.
- */
-av_pix_fmt_desc_get(pix_fmt: number): Promise<number>;
-/**
- * Return the next frame of a stream.
- * This function returns what is stored in the file, and does not validate
- * that what is there are valid frames for the decoder. It will split what is
- * stored in the file into frames and return one for each call. It will not
- * omit invalid data between valid frames so as to give the decoder the maximum
- * information possible for decoding.
- *
- * On success, the returned packet is reference-counted (pkt->buf is set) and
- * valid indefinitely. The packet must be freed with av_packet_unref() when
- * it is no longer needed. For video, the packet contains exactly one frame.
- * For audio, it contains an integer number of frames if each frame has
- * a known fixed size (e.g. PCM or ADPCM data). If the audio frames have
- * a variable size (e.g. MPEG audio), then it contains one frame.
- *
- * pkt->pts, pkt->dts and pkt->duration are always set to correct
- * values in AVStream.time_base units (and guessed if the format cannot
- * provide them). pkt->pts can be AV_NOPTS_VALUE if the video format
- * has B-frames, so it is better to rely on pkt->dts if you do not
- * decompress the payload.
- *
- * @return 0 if OK, < 0 on error or end of file. On error, pkt will be blank
- *         (as if it came from av_packet_alloc()).
- *
- * @note pkt will be initialized, so it may be uninitialized, but it must not
- *       contain data that needs to be freed.
- */
-av_read_frame(s: number,pkt: number): Promise<number>;
-/**
- * Reduce packet size, correctly zeroing padding
- *
- * @param pkt packet
- * @param size new size
- */
-av_shrink_packet(pkt: number,size: number): Promise<void>;
-/**
- * Write a packet to an output media file.
- *
- * This function passes the packet directly to the muxer, without any buffering
- * or reordering. The caller is responsible for correctly interleaving the
- * packets if the format requires it. Callers that want libavformat to handle
- * the interleaving should call av_interleaved_write_frame() instead of this
- * function.
- *
- * @param s media file handle
- * @param pkt The packet containing the data to be written. Note that unlike
- *            av_interleaved_write_frame(), this function does not take
- *            ownership of the packet passed to it (though some muxers may make
- *            an internal reference to the input packet).
- *            <br>
- *            This parameter can be NULL (at any time, not just at the end), in
- *            order to immediately flush data buffered within the muxer, for
- *            muxers that buffer up data internally before writing it to the
- *            output.
- *            <br>
- *            Packet's @ref AVPacket.stream_index "stream_index" field must be
- *            set to the index of the corresponding stream in @ref
- *            AVFormatContext.streams "s->streams".
- *            <br>
- *            The timestamps (@ref AVPacket.pts "pts", @ref AVPacket.dts "dts")
- *            must be set to correct values in the stream's timebase (unless the
- *            output format is flagged with the AVFMT_NOTIMESTAMPS flag, then
- *            they can be set to AV_NOPTS_VALUE).
- *            The dts for subsequent packets passed to this function must be strictly
- *            increasing when compared in their respective timebases (unless the
- *            output format is flagged with the AVFMT_TS_NONSTRICT, then they
- *            merely have to be nondecreasing).  @ref AVPacket.duration
- *            "duration") should also be set if known.
- * @return < 0 on error, = 0 if OK, 1 if flushed and there is no more data to flush
- *
- * @see av_interleaved_write_frame()
- */
-av_write_frame(s: number,pkt: number): Promise<number>;
-/**
- * Write the stream trailer to an output media file and free the
- * file private data.
- *
- * May only be called after a successful call to avformat_write_header.
- *
- * @param s media file handle
- * @return 0 if OK, AVERROR_xxx on error
- */
-av_write_trailer(s: number): Promise<number>;
-/**
- * Copy entries from one AVDictionary struct into another.
- *
- * @note Metadata is read using the ::AV_DICT_IGNORE_SUFFIX flag
- *
- * @param dst   Pointer to a pointer to a AVDictionary struct to copy into. If *dst is NULL,
- *              this function will allocate a struct for you and put it in *dst
- * @param src   Pointer to the source AVDictionary struct to copy items from.
- * @param flags Flags to use when setting entries in *dst
- *
- * @return 0 on success, negative AVERROR code on failure. If dst was allocated
- *           by this function, callers should free the associated memory.
- */
-av_dict_copy_js(dst: number,src: number,flags: number): Promise<number>;
-/**
- * Free all the memory allocated for an AVDictionary struct
- * and all keys and values.
- */
-av_dict_free(m: number): Promise<void>;
-/**
- * Set the given entry in *pm, overwriting an existing entry.
- *
- * Note: If AV_DICT_DONT_STRDUP_KEY or AV_DICT_DONT_STRDUP_VAL is set,
- * these arguments will be freed on error.
- *
- * @warning Adding a new entry to a dictionary invalidates all existing entries
- * previously returned with av_dict_get() or av_dict_iterate().
- *
- * @param pm        Pointer to a pointer to a dictionary struct. If *pm is NULL
- *                  a dictionary struct is allocated and put in *pm.
- * @param key       Entry key to add to *pm (will either be av_strduped or added as a new key depending on flags)
- * @param value     Entry value to add to *pm (will be av_strduped or added as a new key depending on flags).
- *                  Passing a NULL value will cause an existing entry to be deleted.
- *
- * @return          >= 0 on success otherwise an error code <0
- */
-av_dict_set_js(pm: number,key: string,value: string,flags: number): Promise<number>;
-/**
- * Allocate and return an SwsContext. You need it to perform
- * scaling/conversion operations using sws_scale().
- *
- * @param srcW the width of the source image
- * @param srcH the height of the source image
- * @param srcFormat the source image format
- * @param dstW the width of the destination image
- * @param dstH the height of the destination image
- * @param dstFormat the destination image format
- * @param flags specify which algorithm and options to use for rescaling
- * @param param extra parameters to tune the used scaler
- *              For SWS_BICUBIC param[0] and [1] tune the shape of the basis
- *              function, param[0] tunes f(1) and param[1] f´(1)
- *              For SWS_GAUSS param[0] tunes the exponent and thus cutoff
- *              frequency
- *              For SWS_LANCZOS param[0] tunes the width of the window function
- * @return a pointer to an allocated context, or NULL in case of error
- * @note this function is to be removed after a saner alternative is
- *       written
- */
-sws_getContext(srcW: number,srcH: number,srcFormat: number,dstW: number,dstH: number,dstFormat: number,flags: number,srcFilter: number,dstFilter: number,param: number): Promise<number>;
-/**
- * Free the swscaler context swsContext.
- * If swsContext is NULL, then does nothing.
- */
-sws_freeContext(swsContext: number): Promise<void>;
-/**
- * Scale source data from src and write the output to dst.
- *
- * This is merely a convenience wrapper around
- * - sws_frame_start()
- * - sws_send_slice(0, src->height)
- * - sws_receive_slice(0, dst->height)
- * - sws_frame_end()
- *
- * @param c   The scaling context
- * @param dst The destination frame. See documentation for sws_frame_start() for
- *            more details.
- * @param src The source frame.
- *
- * @return 0 on success, a negative AVERROR code on failure
- */
-sws_scale_frame(c: number,dst: number,src: number): Promise<number>;
-AVPacketSideData_data(a0: number,a1: number): Promise<number>;
-AVPacketSideData_size(a0: number,a1: number): Promise<number>;
-AVPacketSideData_type(a0: number,a1: number): Promise<number>;
-AVPixFmtDescriptor_comp_depth(a0: number,a1: number): Promise<number>;
-ff_error(a0: number): Promise<string>;
-ff_nothing(): Promise<void>;
-calloc(a0: number,a1: number): Promise<number>;
-close(a0: number): Promise<number>;
-dup2(a0: number,a1: number): Promise<number>;
-free(a0: number): Promise<void>;
-malloc(a0: number): Promise<number>;
-mallinfo_uordblks(): Promise<number>;
-open(a0: string,a1: number,a2: number): Promise<number>;
-strerror(a0: number): Promise<string>;
-libavjs_with_swscale(): Promise<number>;
-libavjs_create_main_thread(): Promise<number>;
-ffmpeg_main(a0: number,a1: number): Promise<number>;
-ffprobe_main(a0: number,a1: number): Promise<number>;
-AVFrame_channel_layout(ptr: number): Promise<number>;
-AVFrame_channel_layout_s(ptr: number, val: number): Promise<void>;
-AVFrame_channel_layouthi(ptr: number): Promise<number>;
-AVFrame_channel_layouthi_s(ptr: number, val: number): Promise<void>;
-AVFrame_channels(ptr: number): Promise<number>;
-AVFrame_channels_s(ptr: number, val: number): Promise<void>;
-AVFrame_channel_layoutmask(ptr: number): Promise<number>;
-AVFrame_channel_layoutmask_s(ptr: number, val: number): Promise<void>;
-AVFrame_ch_layout_nb_channels(ptr: number): Promise<number>;
-AVFrame_ch_layout_nb_channels_s(ptr: number, val: number): Promise<void>;
-AVFrame_crop_bottom(ptr: number): Promise<number>;
-AVFrame_crop_bottom_s(ptr: number, val: number): Promise<void>;
-AVFrame_crop_left(ptr: number): Promise<number>;
-AVFrame_crop_left_s(ptr: number, val: number): Promise<void>;
-AVFrame_crop_right(ptr: number): Promise<number>;
-AVFrame_crop_right_s(ptr: number, val: number): Promise<void>;
-AVFrame_crop_top(ptr: number): Promise<number>;
-AVFrame_crop_top_s(ptr: number, val: number): Promise<void>;
-AVFrame_data_a(ptr: number, idx: number): Promise<number>;
-AVFrame_data_a_s(ptr: number, idx: number, val: number): Promise<void>;
-AVFrame_format(ptr: number): Promise<number>;
-AVFrame_format_s(ptr: number, val: number): Promise<void>;
-AVFrame_height(ptr: number): Promise<number>;
-AVFrame_height_s(ptr: number, val: number): Promise<void>;
-AVFrame_key_frame(ptr: number): Promise<number>;
-AVFrame_key_frame_s(ptr: number, val: number): Promise<void>;
-AVFrame_linesize_a(ptr: number, idx: number): Promise<number>;
-AVFrame_linesize_a_s(ptr: number, idx: number, val: number): Promise<void>;
-AVFrame_nb_samples(ptr: number): Promise<number>;
-AVFrame_nb_samples_s(ptr: number, val: number): Promise<void>;
-AVFrame_pict_type(ptr: number): Promise<number>;
-AVFrame_pict_type_s(ptr: number, val: number): Promise<void>;
-AVFrame_pts(ptr: number): Promise<number>;
-AVFrame_pts_s(ptr: number, val: number): Promise<void>;
-AVFrame_ptshi(ptr: number): Promise<number>;
-AVFrame_ptshi_s(ptr: number, val: number): Promise<void>;
-AVFrame_sample_aspect_ratio_num(ptr: number): Promise<number>;
-AVFrame_sample_aspect_ratio_num_s(ptr: number, val: number): Promise<void>;
-AVFrame_sample_aspect_ratio_den(ptr: number): Promise<number>;
-AVFrame_sample_aspect_ratio_den_s(ptr: number, val: number): Promise<void>;
-AVFrame_sample_aspect_ratio_s(ptr: number, num: number, den: number): Promise<void>;
-AVFrame_sample_rate(ptr: number): Promise<number>;
-AVFrame_sample_rate_s(ptr: number, val: number): Promise<void>;
-AVFrame_time_base_num(ptr: number): Promise<number>;
-AVFrame_time_base_num_s(ptr: number, val: number): Promise<void>;
-AVFrame_time_base_den(ptr: number): Promise<number>;
-AVFrame_time_base_den_s(ptr: number, val: number): Promise<void>;
-AVFrame_time_base_s(ptr: number, num: number, den: number): Promise<void>;
-AVFrame_width(ptr: number): Promise<number>;
-AVFrame_width_s(ptr: number, val: number): Promise<void>;
-AVPixFmtDescriptor_flags(ptr: number): Promise<number>;
-AVPixFmtDescriptor_flags_s(ptr: number, val: number): Promise<void>;
-AVPixFmtDescriptor_log2_chroma_h(ptr: number): Promise<number>;
-AVPixFmtDescriptor_log2_chroma_h_s(ptr: number, val: number): Promise<void>;
-AVPixFmtDescriptor_log2_chroma_w(ptr: number): Promise<number>;
-AVPixFmtDescriptor_log2_chroma_w_s(ptr: number, val: number): Promise<void>;
-AVPixFmtDescriptor_nb_components(ptr: number): Promise<number>;
-AVPixFmtDescriptor_nb_components_s(ptr: number, val: number): Promise<void>;
 AVCodec_name(ptr: number): Promise<string>;
 AVCodec_sample_fmts(ptr: number): Promise<number>;
-AVCodec_sample_fmts_s(ptr: number, val: number): Promise<void>;
-AVCodec_sample_fmts_a(ptr: number, idx: number): Promise<number>;
-AVCodec_sample_fmts_a_s(ptr: number, idx: number, val: number): Promise<void>;
+AVCodec_sample_fmts_s(ptr: number,val: number): Promise<void>;
+AVCodec_sample_fmts_a(ptr: number,idx: number): Promise<number>;
+AVCodec_sample_fmts_a_s(ptr: number,idx: number,val: number): Promise<void>;
 AVCodec_supported_samplerates(ptr: number): Promise<number>;
-AVCodec_supported_samplerates_s(ptr: number, val: number): Promise<void>;
-AVCodec_supported_samplerates_a(ptr: number, idx: number): Promise<number>;
-AVCodec_supported_samplerates_a_s(ptr: number, idx: number, val: number): Promise<void>;
+AVCodec_supported_samplerates_s(ptr: number,val: number): Promise<void>;
+AVCodec_supported_samplerates_a(ptr: number,idx: number): Promise<number>;
+AVCodec_supported_samplerates_a_s(ptr: number,idx: number,val: number): Promise<void>;
 AVCodec_type(ptr: number): Promise<number>;
-AVCodec_type_s(ptr: number, val: number): Promise<void>;
+AVCodec_type_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_codec_id(ptr: number): Promise<number>;
-AVCodecContext_codec_id_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_codec_id_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_codec_type(ptr: number): Promise<number>;
-AVCodecContext_codec_type_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_codec_type_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_bit_rate(ptr: number): Promise<number>;
-AVCodecContext_bit_rate_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_bit_rate_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_bit_ratehi(ptr: number): Promise<number>;
-AVCodecContext_bit_ratehi_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_bit_ratehi_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_channel_layout(ptr: number): Promise<number>;
-AVCodecContext_channel_layout_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_channel_layout_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_channel_layouthi(ptr: number): Promise<number>;
-AVCodecContext_channel_layouthi_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_channel_layouthi_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_channels(ptr: number): Promise<number>;
-AVCodecContext_channels_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_channels_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_channel_layoutmask(ptr: number): Promise<number>;
-AVCodecContext_channel_layoutmask_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_channel_layoutmask_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_ch_layout_nb_channels(ptr: number): Promise<number>;
-AVCodecContext_ch_layout_nb_channels_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_ch_layout_nb_channels_s(ptr: number,val: number): Promise<void>;
+AVCodecContext_coded_side_data(ptr: number): Promise<number>;
+AVCodecContext_coded_side_data_s(ptr: number,val: number): Promise<void>;
+AVCodecContext_compression_level(ptr: number): Promise<number>;
+AVCodecContext_compression_level_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_extradata(ptr: number): Promise<number>;
-AVCodecContext_extradata_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_extradata_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_extradata_size(ptr: number): Promise<number>;
-AVCodecContext_extradata_size_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_extradata_size_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_frame_size(ptr: number): Promise<number>;
-AVCodecContext_frame_size_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_frame_size_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_framerate_num(ptr: number): Promise<number>;
-AVCodecContext_framerate_num_s(ptr: number, val: number): Promise<void>;
 AVCodecContext_framerate_den(ptr: number): Promise<number>;
-AVCodecContext_framerate_den_s(ptr: number, val: number): Promise<void>;
-AVCodecContext_framerate_s(ptr: number, num: number, den: number): Promise<void>;
+AVCodecContext_framerate_num_s(ptr: number,val: number): Promise<number>;
+AVCodecContext_framerate_den_s(ptr: number,val: number): Promise<number>;
+AVCodecContext_framerate_s(ptr: number,num: number,den: number): Promise<number>;
 AVCodecContext_gop_size(ptr: number): Promise<number>;
-AVCodecContext_gop_size_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_gop_size_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_height(ptr: number): Promise<number>;
-AVCodecContext_height_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_height_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_keyint_min(ptr: number): Promise<number>;
-AVCodecContext_keyint_min_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_keyint_min_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_level(ptr: number): Promise<number>;
-AVCodecContext_level_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_level_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_max_b_frames(ptr: number): Promise<number>;
-AVCodecContext_max_b_frames_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_max_b_frames_s(ptr: number,val: number): Promise<void>;
+AVCodecContext_nb_coded_side_data(ptr: number): Promise<number>;
+AVCodecContext_nb_coded_side_data_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_pix_fmt(ptr: number): Promise<number>;
-AVCodecContext_pix_fmt_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_pix_fmt_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_profile(ptr: number): Promise<number>;
-AVCodecContext_profile_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_profile_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_rc_max_rate(ptr: number): Promise<number>;
-AVCodecContext_rc_max_rate_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_rc_max_rate_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_rc_max_ratehi(ptr: number): Promise<number>;
-AVCodecContext_rc_max_ratehi_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_rc_max_ratehi_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_rc_min_rate(ptr: number): Promise<number>;
-AVCodecContext_rc_min_rate_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_rc_min_rate_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_rc_min_ratehi(ptr: number): Promise<number>;
-AVCodecContext_rc_min_ratehi_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_rc_min_ratehi_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_sample_aspect_ratio_num(ptr: number): Promise<number>;
-AVCodecContext_sample_aspect_ratio_num_s(ptr: number, val: number): Promise<void>;
 AVCodecContext_sample_aspect_ratio_den(ptr: number): Promise<number>;
-AVCodecContext_sample_aspect_ratio_den_s(ptr: number, val: number): Promise<void>;
-AVCodecContext_sample_aspect_ratio_s(ptr: number, num: number, den: number): Promise<void>;
+AVCodecContext_sample_aspect_ratio_num_s(ptr: number,val: number): Promise<number>;
+AVCodecContext_sample_aspect_ratio_den_s(ptr: number,val: number): Promise<number>;
+AVCodecContext_sample_aspect_ratio_s(ptr: number,num: number,den: number): Promise<number>;
 AVCodecContext_sample_fmt(ptr: number): Promise<number>;
-AVCodecContext_sample_fmt_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_sample_fmt_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_sample_rate(ptr: number): Promise<number>;
-AVCodecContext_sample_rate_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_sample_rate_s(ptr: number,val: number): Promise<void>;
+AVCodecContext_strict_std_compliance(ptr: number): Promise<number>;
+AVCodecContext_strict_std_compliance_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_time_base_num(ptr: number): Promise<number>;
-AVCodecContext_time_base_num_s(ptr: number, val: number): Promise<void>;
 AVCodecContext_time_base_den(ptr: number): Promise<number>;
-AVCodecContext_time_base_den_s(ptr: number, val: number): Promise<void>;
-AVCodecContext_time_base_s(ptr: number, num: number, den: number): Promise<void>;
+AVCodecContext_time_base_num_s(ptr: number,val: number): Promise<number>;
+AVCodecContext_time_base_den_s(ptr: number,val: number): Promise<number>;
+AVCodecContext_time_base_s(ptr: number,num: number,den: number): Promise<number>;
+AVCodecContext_pkt_timebase_num(ptr: number): Promise<number>;
+AVCodecContext_pkt_timebase_den(ptr: number): Promise<number>;
+AVCodecContext_pkt_timebase_num_s(ptr: number,val: number): Promise<number>;
+AVCodecContext_pkt_timebase_den_s(ptr: number,val: number): Promise<number>;
+AVCodecContext_pkt_timebase_s(ptr: number,num: number,den: number): Promise<number>;
 AVCodecContext_qmax(ptr: number): Promise<number>;
-AVCodecContext_qmax_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_qmax_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_qmin(ptr: number): Promise<number>;
-AVCodecContext_qmin_s(ptr: number, val: number): Promise<void>;
+AVCodecContext_qmin_s(ptr: number,val: number): Promise<void>;
 AVCodecContext_width(ptr: number): Promise<number>;
-AVCodecContext_width_s(ptr: number, val: number): Promise<void>;
-AVCodecDescriptor_id(ptr: number): Promise<number>;
-AVCodecDescriptor_id_s(ptr: number, val: number): Promise<void>;
-AVCodecDescriptor_long_name(ptr: number): Promise<number>;
-AVCodecDescriptor_long_name_s(ptr: number, val: number): Promise<void>;
-AVCodecDescriptor_mime_types_a(ptr: number, idx: number): Promise<number>;
-AVCodecDescriptor_mime_types_a_s(ptr: number, idx: number, val: number): Promise<void>;
-AVCodecDescriptor_name(ptr: number): Promise<number>;
-AVCodecDescriptor_name_s(ptr: number, val: number): Promise<void>;
-AVCodecDescriptor_props(ptr: number): Promise<number>;
-AVCodecDescriptor_props_s(ptr: number, val: number): Promise<void>;
-AVCodecDescriptor_type(ptr: number): Promise<number>;
-AVCodecDescriptor_type_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_bit_rate(ptr: number): Promise<number>;
-AVCodecParameters_bit_rate_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_channel_layoutmask(ptr: number): Promise<number>;
-AVCodecParameters_channel_layoutmask_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_channels(ptr: number): Promise<number>;
-AVCodecParameters_channels_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_ch_layout_nb_channels(ptr: number): Promise<number>;
-AVCodecParameters_ch_layout_nb_channels_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_chroma_location(ptr: number): Promise<number>;
-AVCodecParameters_chroma_location_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_codec_id(ptr: number): Promise<number>;
-AVCodecParameters_codec_id_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_codec_tag(ptr: number): Promise<number>;
-AVCodecParameters_codec_tag_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_codec_type(ptr: number): Promise<number>;
-AVCodecParameters_codec_type_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_color_primaries(ptr: number): Promise<number>;
-AVCodecParameters_color_primaries_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_color_range(ptr: number): Promise<number>;
-AVCodecParameters_color_range_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_color_space(ptr: number): Promise<number>;
-AVCodecParameters_color_space_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_color_trc(ptr: number): Promise<number>;
-AVCodecParameters_color_trc_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_extradata(ptr: number): Promise<number>;
-AVCodecParameters_extradata_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_extradata_size(ptr: number): Promise<number>;
-AVCodecParameters_extradata_size_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_format(ptr: number): Promise<number>;
-AVCodecParameters_format_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_framerate_num(ptr: number): Promise<number>;
-AVCodecParameters_framerate_num_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_framerate_den(ptr: number): Promise<number>;
-AVCodecParameters_framerate_den_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_framerate_s(ptr: number, num: number, den: number): Promise<void>;
-AVCodecParameters_height(ptr: number): Promise<number>;
-AVCodecParameters_height_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_level(ptr: number): Promise<number>;
-AVCodecParameters_level_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_profile(ptr: number): Promise<number>;
-AVCodecParameters_profile_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_sample_rate(ptr: number): Promise<number>;
-AVCodecParameters_sample_rate_s(ptr: number, val: number): Promise<void>;
-AVCodecParameters_width(ptr: number): Promise<number>;
-AVCodecParameters_width_s(ptr: number, val: number): Promise<void>;
-AVPacket_data(ptr: number): Promise<number>;
-AVPacket_data_s(ptr: number, val: number): Promise<void>;
-AVPacket_dts(ptr: number): Promise<number>;
-AVPacket_dts_s(ptr: number, val: number): Promise<void>;
-AVPacket_dtshi(ptr: number): Promise<number>;
-AVPacket_dtshi_s(ptr: number, val: number): Promise<void>;
-AVPacket_duration(ptr: number): Promise<number>;
-AVPacket_duration_s(ptr: number, val: number): Promise<void>;
-AVPacket_durationhi(ptr: number): Promise<number>;
-AVPacket_durationhi_s(ptr: number, val: number): Promise<void>;
-AVPacket_flags(ptr: number): Promise<number>;
-AVPacket_flags_s(ptr: number, val: number): Promise<void>;
-AVPacket_pos(ptr: number): Promise<number>;
-AVPacket_pos_s(ptr: number, val: number): Promise<void>;
-AVPacket_poshi(ptr: number): Promise<number>;
-AVPacket_poshi_s(ptr: number, val: number): Promise<void>;
-AVPacket_pts(ptr: number): Promise<number>;
-AVPacket_pts_s(ptr: number, val: number): Promise<void>;
-AVPacket_ptshi(ptr: number): Promise<number>;
-AVPacket_ptshi_s(ptr: number, val: number): Promise<void>;
-AVPacket_side_data(ptr: number): Promise<number>;
-AVPacket_side_data_s(ptr: number, val: number): Promise<void>;
-AVPacket_side_data_elems(ptr: number): Promise<number>;
-AVPacket_side_data_elems_s(ptr: number, val: number): Promise<void>;
-AVPacket_size(ptr: number): Promise<number>;
-AVPacket_size_s(ptr: number, val: number): Promise<void>;
-AVPacket_stream_index(ptr: number): Promise<number>;
-AVPacket_stream_index_s(ptr: number, val: number): Promise<void>;
-AVPacket_time_base_num(ptr: number): Promise<number>;
-AVPacket_time_base_num_s(ptr: number, val: number): Promise<void>;
-AVPacket_time_base_den(ptr: number): Promise<number>;
-AVPacket_time_base_den_s(ptr: number, val: number): Promise<void>;
-AVPacket_time_base_s(ptr: number, num: number, den: number): Promise<void>;
-AVFormatContext_duration(ptr: number): Promise<number>;
-AVFormatContext_duration_s(ptr: number, val: number): Promise<void>;
-AVFormatContext_durationhi(ptr: number): Promise<number>;
-AVFormatContext_durationhi_s(ptr: number, val: number): Promise<void>;
-AVFormatContext_flags(ptr: number): Promise<number>;
-AVFormatContext_flags_s(ptr: number, val: number): Promise<void>;
-AVFormatContext_nb_streams(ptr: number): Promise<number>;
-AVFormatContext_nb_streams_s(ptr: number, val: number): Promise<void>;
-AVFormatContext_oformat(ptr: number): Promise<number>;
-AVFormatContext_oformat_s(ptr: number, val: number): Promise<void>;
-AVFormatContext_pb(ptr: number): Promise<number>;
-AVFormatContext_pb_s(ptr: number, val: number): Promise<void>;
-AVFormatContext_start_time(ptr: number): Promise<number>;
-AVFormatContext_start_time_s(ptr: number, val: number): Promise<void>;
-AVFormatContext_start_timehi(ptr: number): Promise<number>;
-AVFormatContext_start_timehi_s(ptr: number, val: number): Promise<void>;
-AVFormatContext_streams_a(ptr: number, idx: number): Promise<number>;
-AVFormatContext_streams_a_s(ptr: number, idx: number, val: number): Promise<void>;
-AVStream_codecpar(ptr: number): Promise<number>;
-AVStream_codecpar_s(ptr: number, val: number): Promise<void>;
-AVStream_discard(ptr: number): Promise<number>;
-AVStream_discard_s(ptr: number, val: number): Promise<void>;
-AVStream_duration(ptr: number): Promise<number>;
-AVStream_duration_s(ptr: number, val: number): Promise<void>;
-AVStream_durationhi(ptr: number): Promise<number>;
-AVStream_durationhi_s(ptr: number, val: number): Promise<void>;
-AVStream_time_base_num(ptr: number): Promise<number>;
-AVStream_time_base_num_s(ptr: number, val: number): Promise<void>;
-AVStream_time_base_den(ptr: number): Promise<number>;
-AVStream_time_base_den_s(ptr: number, val: number): Promise<void>;
-AVStream_time_base_s(ptr: number, num: number, den: number): Promise<void>;
-AVFilterInOut_filter_ctx(ptr: number): Promise<number>;
-AVFilterInOut_filter_ctx_s(ptr: number, val: number): Promise<void>;
-AVFilterInOut_name(ptr: number): Promise<number>;
-AVFilterInOut_name_s(ptr: number, val: number): Promise<void>;
-AVFilterInOut_next(ptr: number): Promise<number>;
-AVFilterInOut_next_s(ptr: number, val: number): Promise<void>;
-AVFilterInOut_pad_idx(ptr: number): Promise<number>;
-AVFilterInOut_pad_idx_s(ptr: number, val: number): Promise<void>;
-av_frame_free_js(ptr: number): Promise<void>;
-av_packet_free_js(ptr: number): Promise<void>;
-avformat_close_input_js(ptr: number): Promise<void>;
+AVCodecContext_width_s(ptr: number,val: number): Promise<void>;
 avcodec_free_context_js(ptr: number): Promise<void>;
-avcodec_parameters_free_js(ptr: number): Promise<void>;
-avfilter_graph_free_js(ptr: number): Promise<void>;
-avfilter_inout_free_js(ptr: number): Promise<void>;
-av_dict_free_js(ptr: number): Promise<void>;
-copyin_u8(ptr: number, arr: Uint8Array): Promise<void>;
-copyout_u8(ptr: number, len: number): Promise<Uint8Array>;
-copyin_s16(ptr: number, arr: Int16Array): Promise<void>;
-copyout_s16(ptr: number, len: number): Promise<Int16Array>;
-copyin_s32(ptr: number, arr: Int32Array): Promise<void>;
-copyout_s32(ptr: number, len: number): Promise<Int32Array>;
-copyin_f32(ptr: number, arr: Float32Array): Promise<void>;
-copyout_f32(ptr: number, len: number): Promise<Float32Array>;
-
-    /**
- * Read a complete file from the in-memory filesystem.
- * @param name  Filename to read
- */
-readFile(name: string): Promise<Uint8Array>;
-/**
- * Write a complete file to the in-memory filesystem.
- * @param name  Filename to write
- * @param content  Content to write to the file
- */
-writeFile(name: string, content: Uint8Array): Promise<Uint8Array>;
-/**
- * Delete a file in the in-memory filesystem.
- * @param name  Filename to delete
- */
-unlink(name: string): Promise<void>;
-/**
- * Unmount a mounted filesystem.
- * @param mountpoint  Path where the filesystem is mounted
- */
-unmount(mountpoint: string): Promise<void>;
-/**
- * Make a lazy file. Direct link to createLazyFile.
- */
-createLazyFile(
-    parent: string, name: string, url: string, canRead: boolean,
-    canWrite: boolean
-): Promise<void>;
-/**
- * Make a reader device.
- * @param name  Filename to create.
- * @param mode  Unix permissions (pointless since this is an in-memory
- *              filesystem)
- */
-mkreaderdev(name: string, mode?: number): Promise<void>;
-/**
- * Make a block reader "device". Technically a file that we then hijack to have
- * our behavior.
- * @param name  Filename to create.
- * @param size  Size of the device to present.
- */
-mkblockreaderdev(name: string, size: number): Promise<void>;
-/**
- * Make a readahead device. This reads a File (or other Blob) and attempts to
- * read ahead of whatever libav actually asked for. Note that this overrides
- * onblockread, so if you want to support both kinds of files, make sure you set
- * onblockread before calling this.
- * @param name  Filename to create.
- * @param file  Blob or file to read.
- */
-mkreadaheadfile(name: string, file: Blob): Promise<void>;
-/**
- * Unlink a readahead file. Also gets rid of the File reference.
- * @param name  Filename to unlink.
- */
-unlinkreadaheadfile(name: string): Promise<void>;
-/**
- * Make a writer device.
- * @param name  Filename to create
- * @param mode  Unix permissions
- */
-mkwriterdev(name: string, mode?: number): Promise<void>;
-/**
- * Make a stream writer device. The same as a writer device but does not allow
- * seeking.
- * @param name  Filename to create
- * @param mode  Unix permissions
- */
-mkstreamwriterdev(name: string, mode?: number): Promise<void>;
-/**
- * Mount a writer *filesystem*. All files created in this filesystem will be
- * redirected as writers. The directory will be created for you if it doesn't
- * already exist, but it may already exist.
- * @param mountpoint  Directory to mount as a writer filesystem
- */
-mountwriterfs(mountpoint: string): Promise<void>;
-/**
- * Make a workerfs file. Returns the filename that it's mounted to.
- * @param name  Filename to use.
- * @param blob  Blob to load at that file.
- */
-mkworkerfsfile(name: string, blob: Blob): Promise<string>;
-/**
- * Unmount (unmake) a workerfs file. Give the *original name you provided*, not
- * the name mkworkerfsfile returned.
- * @param name  Filename to unmount.
- */
-unlinkworkerfsfile(name: string): Promise<void>;
-/**
- * Make a FileSystemFileHandle device. This writes via a FileSystemFileHandle,
- * synchronously if possible. Note that this overrides onwrite, so if you want
- * to support both kinds of files, make sure you set onwrite before calling
- * this.
- * @param name  Filename to create.
- * @param fsfh  FileSystemFileHandle corresponding to this filename.
- */
-mkfsfhfile(name: string, fsfh: FileSystemFileHandle): Promise<void>;
-/**
- * Unlink a FileSystemFileHandle file. Also closes the file handle.
- * @param name  Filename to unlink.
- */
-unlinkfsfhfile(name: string): Promise<void>;
-/**
- * Send some data to a reader device. To indicate EOF, send null. To indicate an
- * error, send EOF and include an error code in the options.
- * @param name  Filename of the reader device.
- * @param data  Data to send.
- * @param opts  Optional send options, such as an error code.
- */
-ff_reader_dev_send(
-    name: string, data: Uint8Array | null,
-    opts?: {
-        errorCode?: number,
-        error?: any // any other error, used internally
-    }
-): Promise<void>;
-/**
- * Send some data to a block reader device. To indicate EOF, send null (but note
- * that block read devices have a fixed size, and will automatically send EOF
- * for reads outside of that size, so you should not normally need to send EOF).
- * To indicate an error, send EOF and include an error code in the options.
- * @param name  Filename of the reader device.
- * @param pos  Position of the data in the file.
- * @param data  Data to send.
- * @param opts  Optional send options, such as an error code.
- */
-ff_block_reader_dev_send(
-    name: string, pos: number, data: Uint8Array | null,
-    opts?: {
-        errorCode?: number,
-        error?: any // any other error, used internally
-    }
-): Promise<void>;
-/**
- * @deprecated
- * DEPRECATED. Use the onread callback.
- * Metafunction to determine whether any device has any waiters. This can be
- * used to determine whether more data needs to be sent before a previous step
- * will be fully resolved.
- * @param name  Optional name of file to check for waiters
- */
-ff_reader_dev_waiting(name?: string): Promise<boolean>;
 /**
  * Metafunction to initialize an encoder with all the bells and whistles.
  * Returns [AVCodec, AVCodecContext, AVFrame, AVPacket, frame_size]
@@ -2312,101 +2499,146 @@ ff_decode_multi(
     }
 ): Promise<ImageData[]>;
 /**
- * Initialize a muxer format, format context and some number of streams.
- * Returns [AVFormatContext, AVOutputFormat, AVIOContext, AVStream[]]
- * @param opts  Muxer options
- * @param stramCtxs  Context info for each stream to mux
+ * Get a frame with filtered data from sink and put it in frame.
+ *
+ * @param ctx pointer to a context of a buffersink or abuffersink AVFilter.
+ * @param frame pointer to an allocated frame that will be filled with data.
+ *              The data must be freed using av_frame_unref() / av_frame_free()
+ *
+ * @return
+ *         - >= 0 if a frame was successfully returned.
+ *         - AVERROR(EAGAIN) if no frames are available at this point; more
+ *           input frames must be added to the filtergraph to get more output.
+ *         - AVERROR_EOF if there will be no more output frames on this sink.
+ *         - A different negative AVERROR code in other failure cases.
  */
-ff_init_muxer(
-    opts: {
-        oformat?: number, // format pointer
-        format_name?: string, // libav name
-        filename?: string,
-        device?: boolean, // Create a writer device
-        open?: boolean, // Open the file for writing
-        codecpars?: boolean // Streams is in terms of codecpars, not codecctx
-    },
-    streamCtxs: [number, number, number][] // AVCodecContext | AVCodecParameters, time_base_num, time_base_den
-): Promise<[number, number, number, number[]]>;
+av_buffersink_get_frame(ctx: number,frame: number): Promise<number>;
+av_buffersink_get_time_base_num(a0: number): Promise<number>;
+av_buffersink_get_time_base_den(a0: number): Promise<number>;
 /**
- * Free up a muxer format and/or file
- * @param oc  AVFormatContext
- * @param pb  AVIOContext
+ * Set the frame size for an audio buffer sink.
+ *
+ * All calls to av_buffersink_get_buffer_ref will return a buffer with
+ * exactly the specified number of samples, or AVERROR(EAGAIN) if there is
+ * not enough. The last buffer at EOF will be padded with 0.
  */
-ff_free_muxer(oc: number, pb: number): Promise<void>;
+av_buffersink_set_frame_size(ctx: number,frame_size: number): Promise<void>;
+ff_buffersink_set_ch_layout(a0: number,a1: number,a2: number): Promise<number>;
 /**
- * Initialize a demuxer from a file and format context, and get the list of
- * codecs/types.
- * Returns [AVFormatContext, Stream[]]
- * @param filename  Filename to open
- * @param fmt  Format to use (optional)
+ * Add a frame to the buffer source.
+ *
+ * By default, if the frame is reference-counted, this function will take
+ * ownership of the reference(s) and reset the frame. This can be controlled
+ * using the flags.
+ *
+ * If this function returns an error, the input frame is not touched.
+ *
+ * @param buffer_src  pointer to a buffer source context
+ * @param frame       a frame, or NULL to mark EOF
+ * @param flags       a combination of AV_BUFFERSRC_FLAG_*
+ * @return            >= 0 in case of success, a negative AVERROR code
+ *                    in case of failure
  */
-ff_init_demuxer_file(
-    filename: string, fmt?: string
-): Promise<[number, Stream[]]>;
+av_buffersrc_add_frame_flags(buffer_src: number,frame: number,flags: number): Promise<number>;
 /**
- * Write some number of packets at once.
- * @param oc  AVFormatContext
- * @param pkt  AVPacket
- * @param inPackets  Packets to write
- * @param interleave  Set to false to *not* use the interleaved writer.
- *                    Interleaving is the default.
+ * Free a filter context. This will also remove the filter from its
+ * filtergraph's list of filters.
+ *
+ * @param filter the filter to free
  */
-ff_write_multi(
-    oc: number, pkt: number, inPackets: (Packet | number)[], interleave?: boolean
-): Promise<void>;
+avfilter_free(filter: number): Promise<void>;
 /**
- * Read many packets at once. If you don't set any limits, this function will
- * block (asynchronously) until the whole file is read, so make sure you set
- * some limits if you want to read a bit at a time. Returns a pair [result,
- * packets], where the result indicates whether an error was encountered, an
- * EOF, or simply limits (EAGAIN), and packets is a dictionary indexed by the
- * stream number in which each element is an array of packets from that stream.
- * @param fmt_ctx  AVFormatContext
- * @param pkt  AVPacket
- * @param opts  Other options
+ * Get a filter definition matching the given name.
+ *
+ * @param name the filter name to find
+ * @return     the filter definition, if any matching one is registered.
+ *             NULL if none found.
  */
-ff_read_frame_multi(
-    fmt_ctx: number, pkt: number, opts?: {
-        limit?: number, // OUTPUT limit, in bytes
-        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
-        copyoutPacket?: "default" // Version of ff_copyout_packet to use
-    }
-): Promise<[number, Record<number, Packet[]>]>
-ff_read_frame_multi(
-    fmt_ctx: number, pkt: number, opts: {
-        limit?: number, // OUTPUT limit, in bytes
-        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
-        copyoutPacket: "ptr" // Version of ff_copyout_packet to use
-    }
-): Promise<[number, Record<number, number[]>]>;
+avfilter_get_by_name(name: string): Promise<number>;
 /**
- * @deprecated
- * DEPRECATED. Use `ff_read_frame_multi`.
- * Read many packets at once. This older API is now deprecated. The devfile
- * parameter is unused and unsupported. Dev files should be used via the normal
- * `ff_reader_dev_waiting` API, rather than counting on device file limits, as
- * this function used to.
- * @param fmt_ctx  AVFormatContext
- * @param pkt  AVPacket
- * @param devfile  Unused
- * @param opts  Other options
+ * Allocate a filter graph.
+ *
+ * @return the allocated filter graph on success or NULL.
  */
-ff_read_multi(
-    fmt_ctx: number, pkt: number, devfile?: string | null, opts?: {
-        limit?: number, // OUTPUT limit, in bytes
-        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
-        copyoutPacket?: "default" // Version of ff_copyout_packet to use
-    }
-): Promise<[number, Record<number, Packet[]>]>
-ff_read_multi(
-    fmt_ctx: number, pkt: number, devfile: string | null, opts: {
-        limit?: number, // OUTPUT limit, in bytes
-        devLimit?: number, // INPUT limit, in bytes (don't read if less than this much data is available)
-        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
-        copyoutPacket: "ptr" // Version of ff_copyout_packet to use
-    }
-): Promise<[number, Record<number, number[]>]>;
+avfilter_graph_alloc(): Promise<number>;
+/**
+ * Check validity and configure all the links and formats in the graph.
+ *
+ * @param graphctx the filter graph
+ * @param log_ctx context used for logging
+ * @return >= 0 in case of success, a negative AVERROR code otherwise
+ */
+avfilter_graph_config(graphctx: number,log_ctx: number): Promise<number>;
+/**
+ * Create and add a filter instance into an existing graph.
+ * The filter instance is created from the filter filt and inited
+ * with the parameter args. opaque is currently ignored.
+ *
+ * In case of success put in *filt_ctx the pointer to the created
+ * filter instance, otherwise set *filt_ctx to NULL.
+ *
+ * @param name the instance name to give to the created filter instance
+ * @param graph_ctx the filter graph
+ * @return a negative AVERROR error code in case of failure, a non
+ * negative value otherwise
+ */
+avfilter_graph_create_filter_js(filt_ctx: number,filt: string,name: string,args: number,opaque: number): Promise<number>;
+/**
+ * Free a graph, destroy its links, and set *graph to NULL.
+ * If *graph is NULL, do nothing.
+ */
+avfilter_graph_free(graph: number): Promise<void>;
+/**
+ * Add a graph described by a string to a graph.
+ *
+ * @note The caller must provide the lists of inputs and outputs,
+ * which therefore must be known before calling the function.
+ *
+ * @note The inputs parameter describes inputs of the already existing
+ * part of the graph; i.e. from the point of view of the newly created
+ * part, they are outputs. Similarly the outputs parameter describes
+ * outputs of the already existing filters, which are provided as
+ * inputs to the parsed filters.
+ *
+ * @param graph   the filter graph where to link the parsed graph context
+ * @param filters string to be parsed
+ * @param inputs  linked list to the inputs of the graph
+ * @param outputs linked list to the outputs of the graph
+ * @return zero on success, a negative AVERROR code on error
+ */
+avfilter_graph_parse(graph: number,filters: string,inputs: number,outputs: number,log_ctx: number): Promise<number>;
+/**
+ * Allocate a single AVFilterInOut entry.
+ * Must be freed with avfilter_inout_free().
+ * @return allocated AVFilterInOut on success, NULL on failure.
+ */
+avfilter_inout_alloc(): Promise<number>;
+/**
+ * Free the supplied list of AVFilterInOut and set *inout to NULL.
+ * If *inout is NULL, do nothing.
+ */
+avfilter_inout_free(inout: number): Promise<void>;
+/**
+ * Link two filters together.
+ *
+ * @param src    the source filter
+ * @param srcpad index of the output pad on the source filter
+ * @param dst    the destination filter
+ * @param dstpad index of the input pad on the destination filter
+ * @return       zero on success
+ */
+avfilter_link(src: number,srcpad: number,dst: number,dstpad: number): Promise<number>;
+LIBAVFILTER_VERSION_INT(): Promise<number>;
+AVFilterInOut_filter_ctx(ptr: number): Promise<number>;
+AVFilterInOut_filter_ctx_s(ptr: number,val: number): Promise<void>;
+AVFilterInOut_name(ptr: number): Promise<number>;
+AVFilterInOut_name_s(ptr: number,val: number): Promise<void>;
+AVFilterInOut_next(ptr: number): Promise<number>;
+AVFilterInOut_next_s(ptr: number,val: number): Promise<void>;
+AVFilterInOut_pad_idx(ptr: number): Promise<number>;
+AVFilterInOut_pad_idx_s(ptr: number,val: number): Promise<void>;
+avfilter_graph_free_js(ptr: number): Promise<void>;
+avfilter_inout_free_js(ptr: number): Promise<void>;
 /**
  * Initialize a filter graph. No equivalent free since you just need to free
  * the graph itself (av_filter_graph_free) and everything under it will be
@@ -2441,6 +2673,10 @@ ff_init_filter_graph(
 ): Promise<[number, number[], number[]]>;
 /**
  * Filter some number of frames, possibly corresponding to multiple sources.
+ * Only one sink is allowed, but config is per source. Set
+ * `config.ignoreSinkTimebase` to leave frames' timebase as it was, rather than
+ * imposing the timebase of the buffer sink. Set `config.copyoutFrame` to use a
+ * different copier than the default.
  * @param srcs  AVFilterContext(s), input
  * @param buffersink_ctx  AVFilterContext, output
  * @param framePtr  AVFrame
@@ -2452,6 +2688,7 @@ ff_filter_multi(
     srcs: number, buffersink_ctx: number, framePtr: number,
     inFrames: (Frame | number)[], config?: boolean | {
         fin?: boolean,
+        ignoreSinkTimebase?: boolean,
         copyoutFrame?: "default" | "video" | "video_packed"
     }
 ): Promise<Frame[]>;
@@ -2459,6 +2696,7 @@ ff_filter_multi(
     srcs: number[], buffersink_ctx: number, framePtr: number,
     inFrames: (Frame | number)[][], config?: boolean[] | {
         fin?: boolean,
+        ignoreSinkTimebase?: boolean,
         copyoutFrame?: "default" | "video" | "video_packed"
     }[]
 ): Promise<Frame[]>
@@ -2466,6 +2704,7 @@ ff_filter_multi(
     srcs: number, buffersink_ctx: number, framePtr: number,
     inFrames: (Frame | number)[], config: {
         fin?: boolean,
+        ignoreSinkTimebase?: boolean,
         copyoutFrame: "ptr"
     }
 ): Promise<number[]>;
@@ -2473,6 +2712,7 @@ ff_filter_multi(
     srcs: number[], buffersink_ctx: number, framePtr: number,
     inFrames: (Frame | number)[][], config: {
         fin?: boolean,
+        ignoreSinkTimebase?: boolean,
         copyoutFrame: "ptr"
     }[]
 ): Promise<number[]>
@@ -2480,6 +2720,7 @@ ff_filter_multi(
     srcs: number, buffersink_ctx: number, framePtr: number,
     inFrames: (Frame | number)[], config: {
         fin?: boolean,
+        ignoreSinkTimebase?: boolean,
         copyoutFrame: "ImageData"
     }
 ): Promise<ImageData[]>;
@@ -2487,6 +2728,7 @@ ff_filter_multi(
     srcs: number[], buffersink_ctx: number, framePtr: number,
     inFrames: (Frame | number)[][], config: {
         fin?: boolean,
+        ignoreSinkTimebase?: boolean,
         copyoutFrame: "ImageData"
     }[]
 ): Promise<ImageData[]>;
@@ -2530,89 +2772,51 @@ ff_decode_filter_multi(
     }
 ): Promise<ImageData[]>;
 /**
- * Copy out a frame.
- * @param frame  AVFrame
+ * Allocate and return an SwsContext. You need it to perform
+ * scaling/conversion operations using sws_scale().
+ *
+ * @param srcW the width of the source image
+ * @param srcH the height of the source image
+ * @param srcFormat the source image format
+ * @param dstW the width of the destination image
+ * @param dstH the height of the destination image
+ * @param dstFormat the destination image format
+ * @param flags specify which algorithm and options to use for rescaling
+ * @param param extra parameters to tune the used scaler
+ *              For SWS_BICUBIC param[0] and [1] tune the shape of the basis
+ *              function, param[0] tunes f(1) and param[1] f´(1)
+ *              For SWS_GAUSS param[0] tunes the exponent and thus cutoff
+ *              frequency
+ *              For SWS_LANCZOS param[0] tunes the width of the window function
+ * @return a pointer to an allocated context, or NULL in case of error
+ * @note this function is to be removed after a saner alternative is
+ *       written
  */
-ff_copyout_frame(frame: number): Promise<Frame>;
+sws_getContext(srcW: number,srcH: number,srcFormat: number,dstW: number,dstH: number,dstFormat: number,flags: number,srcFilter: number,dstFilter: number,param: number): Promise<number>;
 /**
- * Copy out a video frame. `ff_copyout_frame` will copy out a video frame if a
- * video frame is found, but this may be faster if you know it's a video frame.
- * @param frame  AVFrame
+ * Free the swscaler context swsContext.
+ * If swsContext is NULL, then does nothing.
  */
-ff_copyout_frame_video(frame: number): Promise<Frame>;
+sws_freeContext(swsContext: number): Promise<void>;
 /**
- * Get the size of a packed video frame in its native format.
- * @param frame  AVFrame
+ * Scale source data from src and write the output to dst.
+ *
+ * This is merely a convenience wrapper around
+ * - sws_frame_start()
+ * - sws_send_slice(0, src->height)
+ * - sws_receive_slice(0, dst->height)
+ * - sws_frame_end()
+ *
+ * @param c   The scaling context
+ * @param dst The destination frame. See documentation for sws_frame_start() for
+ *            more details.
+ * @param src The source frame.
+ *
+ * @return 0 on success, a negative AVERROR code on failure
  */
-ff_frame_video_packed_size(frame: number): Promise<Frame>;
-/**
- * Copy out a video frame, as a single packed Uint8Array.
- * @param frame  AVFrame
- */
-ff_copyout_frame_video_packed(frame: number): Promise<Frame>;
-/**
- * Copy out a video frame as an ImageData. The video frame *must* be RGBA for
- * this to work as expected (though some ImageData will be returned for any
- * frame).
- * @param frame  AVFrame
- */
-ff_copyout_frame_video_imagedata(
-    frame: number
-): Promise<ImageData>;
-/**
- * Copy in a frame.
- * @param framePtr  AVFrame
- * @param frame  Frame to copy in, as either a Frame or an AVFrame pointer
- */
-ff_copyin_frame(framePtr: number, frame: Frame | number): Promise<void>;
-/**
- * Copy out a packet.
- * @param pkt  AVPacket
- */
-ff_copyout_packet(pkt: number): Promise<Packet>;
-/**
- * Copy "out" a packet by just copying its data into a new AVPacket.
- * @param pkt  AVPacket
- */
-ff_copyout_packet_ptr(pkt: number): Promise<number>;
-/**
- * Copy in a packet.
- * @param pktPtr  AVPacket
- * @param packet  Packet to copy in, as either a Packet or an AVPacket pointer
- */
-ff_copyin_packet(pktPtr: number, packet: Packet | number): Promise<void>;
-/**
- * Copy out codec parameters.
- * @param codecpar  AVCodecParameters
- */
-ff_copyout_codecpar(codecpar: number): Promise<CodecParameters>;
-/**
- * Copy in codec parameters.
- * @param codecparPtr  AVCodecParameters
- * @param codecpar  Codec parameters to copy in.
- */
-ff_copyin_codecpar(codecparPtr: number, codecpar: CodecParameters): Promise<void>;
-/**
- * Allocate and copy in a 32-bit int list.
- * @param list  List of numbers to copy in
- */
-ff_malloc_int32_list(list: number[]): Promise<number>;
-/**
- * Allocate and copy in a 64-bit int list.
- * @param list  List of numbers to copy in
- */
-ff_malloc_int64_list(list: number[]): Promise<number>;
-/**
- * Allocate and copy in a string array. The resulting array will be
- * NULL-terminated.
- * @param arr  Array of strings to copy in.
- */
-ff_malloc_string_array(arr: string[]): Promise<number>;
-/**
- * Free a string array allocated by ff_malloc_string_array.
- * @param ptr  Pointer to the array to free.
- */
-ff_free_string_array(ptr: number): Promise<void>;
+sws_scale_frame(c: number,dst: number,src: number): Promise<number>;
+ffmpeg_main(a0: number,a1: number): Promise<number>;
+ffprobe_main(a0: number,a1: number): Promise<number>;
 /**
  * Frontend to the ffmpeg CLI (if it's compiled in). Pass arguments as strings,
  * or you may intermix arrays of strings for multiple arguments.
@@ -2709,14 +2913,45 @@ ffprobe(...args: (string | string[])[]): Promise<number>;
      * Synchronous functions, available on non-worker libav.js instances.
      */
     export interface LibAVSync {
-    /**
- * Return number of bytes per sample.
- *
- * @param sample_fmt the sample format
- * @return number of bytes per sample or zero if unknown for the given
- * sample format
+calloc_sync(a0: number,a1: number): number;
+close_sync(a0: number): number;
+dup2_sync(a0: number,a1: number): number;
+free_sync(a0: number): void;
+malloc_sync(a0: number): number;
+mallinfo_uordblks_sync(): number;
+open_sync(a0: string,a1: number,a2: number): number;
+strerror_sync(a0: number): string;
+libavjs_create_main_thread_sync(): number;
+libavjs_with_swscale_sync(): number;
+copyin_u8_sync(ptr: number,arr: Uint8Array): void;
+copyout_u8_sync(ptr: number,len: number): Uint8Array;
+copyin_s16_sync(ptr: number,arr: Int16Array): void;
+copyout_s16_sync(ptr: number,len: number): Int16Array;
+copyin_s32_sync(ptr: number,arr: Int32Array): void;
+copyout_s32_sync(ptr: number,len: number): Int32Array;
+copyin_f32_sync(ptr: number,arr: Float32Array): void;
+copyout_f32_sync(ptr: number,len: number): Float32Array;
+/**
+ * Allocate and copy in a 32-bit int list.
+ * @param list  List of numbers to copy in
  */
-av_get_bytes_per_sample_sync(sample_fmt: number): number;
+ff_malloc_int32_list_sync(list: number[]): number;
+/**
+ * Allocate and copy in a 64-bit int list.
+ * @param list  List of numbers to copy in
+ */
+ff_malloc_int64_list_sync(list: number[]): number;
+/**
+ * Allocate and copy in a string array. The resulting array will be
+ * NULL-terminated.
+ * @param arr  Array of strings to copy in.
+ */
+ff_malloc_string_array_sync(arr: string[]): number;
+/**
+ * Free a string array allocated by ff_malloc_string_array.
+ * @param ptr  Pointer to the array to free.
+ */
+ff_free_string_array_sync(ptr: number): void;
 /**
  * Compare two timestamps each in its own time base.
  *
@@ -2730,6 +2965,59 @@ av_get_bytes_per_sample_sync(sample_fmt: number): number;
  * the `int64_t` range when represented in the other's timebase.
  */
 av_compare_ts_js_sync(ts_a: number,tb_a: number,ts_b: number,tb_b: number,a4: number,a5: number,a6: number,a7: number): number;
+/**
+ * Copy entries from one AVDictionary struct into another.
+ *
+ * @note Metadata is read using the ::AV_DICT_IGNORE_SUFFIX flag
+ *
+ * @param dst   Pointer to a pointer to a AVDictionary struct to copy into. If *dst is NULL,
+ *              this function will allocate a struct for you and put it in *dst
+ * @param src   Pointer to the source AVDictionary struct to copy items from.
+ * @param flags Flags to use when setting entries in *dst
+ *
+ * @return 0 on success, negative AVERROR code on failure. If dst was allocated
+ *           by this function, callers should free the associated memory.
+ */
+av_dict_copy_js_sync(dst: number,src: number,flags: number): number;
+/**
+ * Free all the memory allocated for an AVDictionary struct
+ * and all keys and values.
+ */
+av_dict_free_sync(m: number): void;
+/**
+ * Set the given entry in *pm, overwriting an existing entry.
+ *
+ * Note: If AV_DICT_DONT_STRDUP_KEY or AV_DICT_DONT_STRDUP_VAL is set,
+ * these arguments will be freed on error.
+ *
+ * @warning Adding a new entry to a dictionary invalidates all existing entries
+ * previously returned with av_dict_get() or av_dict_iterate().
+ *
+ * @param pm        Pointer to a pointer to a dictionary struct. If *pm is NULL
+ *                  a dictionary struct is allocated and put in *pm.
+ * @param key       Entry key to add to *pm (will either be av_strduped or added as a new key depending on flags)
+ * @param value     Entry value to add to *pm (will be av_strduped or added as a new key depending on flags).
+ *                  Passing a NULL value will cause an existing entry to be deleted.
+ *
+ * @return          >= 0 on success otherwise an error code <0
+ */
+av_dict_set_js_sync(pm: number,key: string,value: string,flags: number): number;
+/**
+ * Get the current log level
+ *
+ * @see lavu_log_constants
+ *
+ * @return Current log level
+ */
+av_log_get_level_sync(): number;
+/**
+ * Set the log level
+ *
+ * @see lavu_log_constants
+ *
+ * @param level Logging level
+ */
+av_log_set_level_sync(level: number): void;
 /**
  * @defgroup opt_set_funcs Option setting functions
  * @{
@@ -2761,6 +3049,19 @@ av_compare_ts_js_sync(ts_a: number,tb_a: number,ts_b: number,tb_b: number,a4: nu
  */
 av_opt_set_sync(obj: number,name: string,val: string,search_flags: number): number;
 av_opt_set_int_list_js_sync(a0: number,a1: string,a2: number,a3: number,a4: number,a5: number): number;
+/**
+ * Duplicate a string.
+ *
+ * @param s String to be duplicated
+ * @return Pointer to a newly-allocated string containing a
+ *         copy of `s` or `NULL` if the string cannot be allocated
+ * @see av_strndup()
+ */
+av_strdup_sync(s: string): number;
+ff_error_sync(a0: number): string;
+ff_nothing_sync(): void | Promise<void>;
+LIBAVUTIL_VERSION_INT_sync(): number;
+av_dict_free_js_sync(ptr: number): void;
 /**
  * Allocate an AVFrame and set its fields to default values.  The resulting
  * struct must be freed using av_frame_free().
@@ -2845,23 +3146,149 @@ av_frame_ref_sync(dst: number,src: number): number;
  * Unreference all the buffers referenced by frame and reset the frame fields.
  */
 av_frame_unref_sync(frame: number): void;
+/**
+ * Return number of bytes per sample.
+ *
+ * @param sample_fmt the sample format
+ * @return number of bytes per sample or zero if unknown for the given
+ * sample format
+ */
+av_get_bytes_per_sample_sync(sample_fmt: number): number;
+/**
+ * Return the name of sample_fmt, or NULL if sample_fmt is not
+ * recognized.
+ */
+av_get_sample_fmt_name_sync(sample_fmt: number): string;
+/**
+ * @return a pixel format descriptor for provided pixel format or NULL if
+ * this pixel format is unknown.
+ */
+av_pix_fmt_desc_get_sync(pix_fmt: number): number;
+AVPixFmtDescriptor_comp_depth_sync(a0: number,a1: number): number;
 ff_frame_rescale_ts_js_sync(a0: number,a1: number,a2: number,a3: number,a4: number): void;
+AVFrame_channel_layout_sync(ptr: number): number;
+AVFrame_channel_layout_s_sync(ptr: number,val: number): void;
+AVFrame_channel_layouthi_sync(ptr: number): number;
+AVFrame_channel_layouthi_s_sync(ptr: number,val: number): void;
+AVFrame_channels_sync(ptr: number): number;
+AVFrame_channels_s_sync(ptr: number,val: number): void;
+AVFrame_channel_layoutmask_sync(ptr: number): number;
+AVFrame_channel_layoutmask_s_sync(ptr: number,val: number): void;
+AVFrame_ch_layout_nb_channels_sync(ptr: number): number;
+AVFrame_ch_layout_nb_channels_s_sync(ptr: number,val: number): void;
+AVFrame_crop_bottom_sync(ptr: number): number;
+AVFrame_crop_bottom_s_sync(ptr: number,val: number): void;
+AVFrame_crop_left_sync(ptr: number): number;
+AVFrame_crop_left_s_sync(ptr: number,val: number): void;
+AVFrame_crop_right_sync(ptr: number): number;
+AVFrame_crop_right_s_sync(ptr: number,val: number): void;
+AVFrame_crop_top_sync(ptr: number): number;
+AVFrame_crop_top_s_sync(ptr: number,val: number): void;
+AVFrame_data_a_sync(ptr: number,idx: number): number;
+AVFrame_data_a_s_sync(ptr: number,idx: number,val: number): void;
+AVFrame_duration_sync(ptr: number): number;
+AVFrame_duration_s_sync(ptr: number,val: number): void;
+AVFrame_flags_sync(ptr: number): number;
+AVFrame_flags_s_sync(ptr: number,val: number): void;
+AVFrame_format_sync(ptr: number): number;
+AVFrame_format_s_sync(ptr: number,val: number): void;
+AVFrame_height_sync(ptr: number): number;
+AVFrame_height_s_sync(ptr: number,val: number): void;
+AVFrame_key_frame_sync(ptr: number): number;
+AVFrame_key_frame_s_sync(ptr: number,val: number): void;
+AVFrame_linesize_a_sync(ptr: number,idx: number): number;
+AVFrame_linesize_a_s_sync(ptr: number,idx: number,val: number): void;
+AVFrame_nb_samples_sync(ptr: number): number;
+AVFrame_nb_samples_s_sync(ptr: number,val: number): void;
+AVFrame_pict_type_sync(ptr: number): number;
+AVFrame_pict_type_s_sync(ptr: number,val: number): void;
+AVFrame_pts_sync(ptr: number): number;
+AVFrame_pts_s_sync(ptr: number,val: number): void;
+AVFrame_ptshi_sync(ptr: number): number;
+AVFrame_ptshi_s_sync(ptr: number,val: number): void;
+AVFrame_sample_aspect_ratio_num_sync(ptr: number): number;
+AVFrame_sample_aspect_ratio_den_sync(ptr: number): number;
+AVFrame_sample_aspect_ratio_num_s_sync(ptr: number,val: number): number;
+AVFrame_sample_aspect_ratio_den_s_sync(ptr: number,val: number): number;
+AVFrame_sample_aspect_ratio_s_sync(ptr: number,num: number,den: number): number;
+AVFrame_sample_rate_sync(ptr: number): number;
+AVFrame_sample_rate_s_sync(ptr: number,val: number): void;
+AVFrame_time_base_num_sync(ptr: number): number;
+AVFrame_time_base_den_sync(ptr: number): number;
+AVFrame_time_base_num_s_sync(ptr: number,val: number): number;
+AVFrame_time_base_den_s_sync(ptr: number,val: number): number;
+AVFrame_time_base_s_sync(ptr: number,num: number,den: number): number;
+AVFrame_width_sync(ptr: number): number;
+AVFrame_width_s_sync(ptr: number,val: number): void;
+AVPixFmtDescriptor_flags_sync(ptr: number): number;
+AVPixFmtDescriptor_flags_s_sync(ptr: number,val: number): void;
+AVPixFmtDescriptor_log2_chroma_h_sync(ptr: number): number;
+AVPixFmtDescriptor_log2_chroma_h_s_sync(ptr: number,val: number): void;
+AVPixFmtDescriptor_log2_chroma_w_sync(ptr: number): number;
+AVPixFmtDescriptor_log2_chroma_w_s_sync(ptr: number,val: number): void;
+AVPixFmtDescriptor_nb_components_sync(ptr: number): number;
+AVPixFmtDescriptor_nb_components_s_sync(ptr: number,val: number): void;
+av_frame_free_js_sync(ptr: number): void;
 /**
- * Get the current log level
- *
- * @see lavu_log_constants
- *
- * @return Current log level
+ * Copy out a frame.
+ * @param frame  AVFrame
  */
-av_log_get_level_sync(): number;
+ff_copyout_frame_sync(frame: number): Frame;
 /**
- * Set the log level
- *
- * @see lavu_log_constants
- *
- * @param level Logging level
+ * Copy out a video frame. `ff_copyout_frame` will copy out a video frame if a
+ * video frame is found, but this may be faster if you know it's a video frame.
+ * @param frame  AVFrame
  */
-av_log_set_level_sync(level: number): void;
+ff_copyout_frame_video_sync(frame: number): Frame;
+/**
+ * Get the size of a packed video frame in its native format.
+ * @param frame  AVFrame
+ */
+ff_frame_video_packed_size_sync(frame: number): Frame;
+/**
+ * Copy out a video frame, as a single packed Uint8Array.
+ * @param frame  AVFrame
+ */
+ff_copyout_frame_video_packed_sync(frame: number): Frame;
+/**
+ * Copy out a video frame as an ImageData. The video frame *must* be RGBA for
+ * this to work as expected (though some ImageData will be returned for any
+ * frame).
+ * @param frame  AVFrame
+ */
+ff_copyout_frame_video_imagedata_sync(
+    frame: number
+): ImageData;
+/**
+ * Copy in a frame.
+ * @param framePtr  AVFrame
+ * @param frame  Frame to copy in, as either a Frame or an AVFrame pointer
+ */
+ff_copyin_frame_sync(framePtr: number, frame: Frame | number): void;
+/**
+ * @return descriptor for given codec ID or NULL if no descriptor exists.
+ */
+avcodec_descriptor_get_sync(id: number): number;
+/**
+ * @return codec descriptor with the given name or NULL if no such descriptor
+ *         exists.
+ */
+avcodec_descriptor_get_by_name_sync(name: string): number;
+/**
+ * Iterate over all codec descriptors known to libavcodec.
+ *
+ * @param prev previous descriptor. NULL to get the first descriptor.
+ *
+ * @return next descriptor or NULL after the last descriptor
+ */
+avcodec_descriptor_next_sync(prev: number): number;
+/**
+ * Increase packet size, correctly zeroing padding
+ *
+ * @param pkt packet
+ * @param grow_by number of bytes by which to increase the size of the packet
+ */
+av_grow_packet_sync(pkt: number,grow_by: number): number;
 /**
  * Allocate an AVPacket and set its fields to default values.  The resulting
  * struct must be freed using av_packet_free().
@@ -2893,6 +3320,16 @@ av_packet_clone_sync(src: number): number;
  * @note passing NULL is a no-op.
  */
 av_packet_free_sync(pkt: number): void;
+/**
+ * Create a writable reference for the data described by a given packet,
+ * avoiding data copy if possible.
+ *
+ * @param pkt Packet whose data should be made writable.
+ *
+ * @return 0 on success, a negative AVERROR on failure. On failure, the
+ *         packet is unchanged.
+ */
+av_packet_make_writable_sync(pkt: number): number;
 /**
  * Allocate new information of a packet.
  *
@@ -2932,6 +3369,9 @@ av_packet_ref_sync(dst: number,src: number): number;
  *               converted
  */
 av_packet_rescale_ts_js_sync(pkt: number,tb_src: number,tb_dst: number,a3: number,a4: number): void;
+AVPacketSideData_data_sync(a0: number,a1: number): number;
+AVPacketSideData_size_sync(a0: number,a1: number): number;
+AVPacketSideData_type_sync(a0: number,a1: number): number;
 /**
  * Wipe the packet.
  *
@@ -2942,144 +3382,888 @@ av_packet_rescale_ts_js_sync(pkt: number,tb_src: number,tb_dst: number,a3: numbe
  */
 av_packet_unref_sync(pkt: number): void;
 /**
- * Duplicate a string.
+ * Reduce packet size, correctly zeroing padding
  *
- * @param s String to be duplicated
- * @return Pointer to a newly-allocated string containing a
- *         copy of `s` or `NULL` if the string cannot be allocated
- * @see av_strndup()
+ * @param pkt packet
+ * @param size new size
  */
-av_strdup_sync(s: string): number;
+av_shrink_packet_sync(pkt: number,size: number): void;
+ff_codecpar_new_side_data_sync(a0: number,a1: number,a2: number): number;
+LIBAVCODEC_VERSION_INT_sync(): number;
+AVCodecDescriptor_id_sync(ptr: number): number;
+AVCodecDescriptor_id_s_sync(ptr: number,val: number): void;
+AVCodecDescriptor_long_name_sync(ptr: number): string;
+AVCodecDescriptor_mime_types_a_sync(ptr: number,idx: number): number;
+AVCodecDescriptor_mime_types_a_s_sync(ptr: number,idx: number,val: number): void;
+AVCodecDescriptor_name_sync(ptr: number): string;
+AVCodecDescriptor_props_sync(ptr: number): number;
+AVCodecDescriptor_props_s_sync(ptr: number,val: number): void;
+AVCodecDescriptor_type_sync(ptr: number): number;
+AVCodecDescriptor_type_s_sync(ptr: number,val: number): void;
+AVCodecParameters_bit_rate_sync(ptr: number): number;
+AVCodecParameters_bit_rate_s_sync(ptr: number,val: number): void;
+AVCodecParameters_channel_layoutmask_sync(ptr: number): number;
+AVCodecParameters_channel_layoutmask_s_sync(ptr: number,val: number): void;
+AVCodecParameters_channels_sync(ptr: number): number;
+AVCodecParameters_channels_s_sync(ptr: number,val: number): void;
+AVCodecParameters_ch_layout_nb_channels_sync(ptr: number): number;
+AVCodecParameters_ch_layout_nb_channels_s_sync(ptr: number,val: number): void;
+AVCodecParameters_chroma_location_sync(ptr: number): number;
+AVCodecParameters_chroma_location_s_sync(ptr: number,val: number): void;
+AVCodecParameters_codec_id_sync(ptr: number): number;
+AVCodecParameters_codec_id_s_sync(ptr: number,val: number): void;
+AVCodecParameters_codec_tag_sync(ptr: number): number;
+AVCodecParameters_codec_tag_s_sync(ptr: number,val: number): void;
+AVCodecParameters_codec_type_sync(ptr: number): number;
+AVCodecParameters_codec_type_s_sync(ptr: number,val: number): void;
+AVCodecParameters_coded_side_data_sync(ptr: number): number;
+AVCodecParameters_coded_side_data_s_sync(ptr: number,val: number): void;
+AVCodecParameters_color_primaries_sync(ptr: number): number;
+AVCodecParameters_color_primaries_s_sync(ptr: number,val: number): void;
+AVCodecParameters_color_range_sync(ptr: number): number;
+AVCodecParameters_color_range_s_sync(ptr: number,val: number): void;
+AVCodecParameters_color_space_sync(ptr: number): number;
+AVCodecParameters_color_space_s_sync(ptr: number,val: number): void;
+AVCodecParameters_color_trc_sync(ptr: number): number;
+AVCodecParameters_color_trc_s_sync(ptr: number,val: number): void;
+AVCodecParameters_extradata_sync(ptr: number): number;
+AVCodecParameters_extradata_s_sync(ptr: number,val: number): void;
+AVCodecParameters_extradata_size_sync(ptr: number): number;
+AVCodecParameters_extradata_size_s_sync(ptr: number,val: number): void;
+AVCodecParameters_format_sync(ptr: number): number;
+AVCodecParameters_format_s_sync(ptr: number,val: number): void;
+AVCodecParameters_framerate_num_sync(ptr: number): number;
+AVCodecParameters_framerate_den_sync(ptr: number): number;
+AVCodecParameters_framerate_num_s_sync(ptr: number,val: number): number;
+AVCodecParameters_framerate_den_s_sync(ptr: number,val: number): number;
+AVCodecParameters_framerate_s_sync(ptr: number,num: number,den: number): number;
+AVCodecParameters_height_sync(ptr: number): number;
+AVCodecParameters_height_s_sync(ptr: number,val: number): void;
+AVCodecParameters_level_sync(ptr: number): number;
+AVCodecParameters_level_s_sync(ptr: number,val: number): void;
+AVCodecParameters_nb_coded_side_data_sync(ptr: number): number;
+AVCodecParameters_nb_coded_side_data_s_sync(ptr: number,val: number): void;
+AVCodecParameters_profile_sync(ptr: number): number;
+AVCodecParameters_profile_s_sync(ptr: number,val: number): void;
+AVCodecParameters_sample_rate_sync(ptr: number): number;
+AVCodecParameters_sample_rate_s_sync(ptr: number,val: number): void;
+AVCodecParameters_width_sync(ptr: number): number;
+AVCodecParameters_width_s_sync(ptr: number,val: number): void;
+AVPacket_data_sync(ptr: number): number;
+AVPacket_data_s_sync(ptr: number,val: number): void;
+AVPacket_dts_sync(ptr: number): number;
+AVPacket_dts_s_sync(ptr: number,val: number): void;
+AVPacket_dtshi_sync(ptr: number): number;
+AVPacket_dtshi_s_sync(ptr: number,val: number): void;
+AVPacket_duration_sync(ptr: number): number;
+AVPacket_duration_s_sync(ptr: number,val: number): void;
+AVPacket_durationhi_sync(ptr: number): number;
+AVPacket_durationhi_s_sync(ptr: number,val: number): void;
+AVPacket_flags_sync(ptr: number): number;
+AVPacket_flags_s_sync(ptr: number,val: number): void;
+AVPacket_pos_sync(ptr: number): number;
+AVPacket_pos_s_sync(ptr: number,val: number): void;
+AVPacket_poshi_sync(ptr: number): number;
+AVPacket_poshi_s_sync(ptr: number,val: number): void;
+AVPacket_pts_sync(ptr: number): number;
+AVPacket_pts_s_sync(ptr: number,val: number): void;
+AVPacket_ptshi_sync(ptr: number): number;
+AVPacket_ptshi_s_sync(ptr: number,val: number): void;
+AVPacket_side_data_sync(ptr: number): number;
+AVPacket_side_data_s_sync(ptr: number,val: number): void;
+AVPacket_side_data_elems_sync(ptr: number): number;
+AVPacket_side_data_elems_s_sync(ptr: number,val: number): void;
+AVPacket_size_sync(ptr: number): number;
+AVPacket_size_s_sync(ptr: number,val: number): void;
+AVPacket_stream_index_sync(ptr: number): number;
+AVPacket_stream_index_s_sync(ptr: number,val: number): void;
+AVPacket_time_base_num_sync(ptr: number): number;
+AVPacket_time_base_den_sync(ptr: number): number;
+AVPacket_time_base_num_s_sync(ptr: number,val: number): number;
+AVPacket_time_base_den_s_sync(ptr: number,val: number): number;
+AVPacket_time_base_s_sync(ptr: number,num: number,den: number): number;
+av_packet_free_js_sync(ptr: number): void;
+avcodec_parameters_free_js_sync(ptr: number): void;
 /**
- * Get a frame with filtered data from sink and put it in frame.
+ * Copy out a packet.
+ * @param pkt  AVPacket
+ */
+ff_copyout_packet_sync(pkt: number): Packet;
+/**
+ * Copy "out" a packet by just copying its data into a new AVPacket.
+ * @param pkt  AVPacket
+ */
+ff_copyout_packet_ptr_sync(pkt: number): number;
+/**
+ * Copy in a packet.
+ * @param pktPtr  AVPacket
+ * @param packet  Packet to copy in, as either a Packet or an AVPacket pointer
+ */
+ff_copyin_packet_sync(pktPtr: number, packet: Packet | number): void;
+/**
+ * Copy out codec parameters.
+ * @param codecpar  AVCodecParameters
+ */
+ff_copyout_codecpar_sync(codecpar: number): CodecParameters;
+/**
+ * Copy in codec parameters.
+ * @param codecparPtr  AVCodecParameters
+ * @param codecpar  Codec parameters to copy in.
+ */
+ff_copyin_codecpar_sync(codecparPtr: number, codecpar: CodecParameters): void;
+/**
+ * Reset the internal bitstream filter state. Should be called e.g. when seeking.
+ */
+av_bsf_flush_sync(ctx: number): void;
+/**
+ * Free a bitstream filter context and everything associated with it; write NULL
+ * into the supplied pointer.
+ */
+av_bsf_free_sync(ctx: number): void;
+/**
+ * Prepare the filter for use, after all the parameters and options have been
+ * set.
  *
- * @param ctx pointer to a context of a buffersink or abuffersink AVFilter.
- * @param frame pointer to an allocated frame that will be filled with data.
- *              The data must be freed using av_frame_unref() / av_frame_free()
+ * @param ctx a AVBSFContext previously allocated with av_bsf_alloc()
+ */
+av_bsf_init_sync(ctx: number): number;
+/**
+ * Parse string describing list of bitstream filters and create single
+ * @ref AVBSFContext describing the whole chain of bitstream filters.
+ * Resulting @ref AVBSFContext can be treated as any other @ref AVBSFContext freshly
+ * allocated by av_bsf_alloc().
+ *
+ * @param      str String describing chain of bitstream filters in format
+ *                 `bsf1[=opt1=val1:opt2=val2][,bsf2]`
+ * @param[out] bsf Pointer to be set to newly created @ref AVBSFContext structure
+ *                 representing the chain of bitstream filters
+ *
+ * @return >=0 on success, negative AVERROR in case of failure
+ */
+av_bsf_list_parse_str_sync(str: string,bsf: number): number;
+/**
+ * Parse string describing list of bitstream filters and create single
+ * @ref AVBSFContext describing the whole chain of bitstream filters.
+ * Resulting @ref AVBSFContext can be treated as any other @ref AVBSFContext freshly
+ * allocated by av_bsf_alloc().
+ *
+ * @param      str String describing chain of bitstream filters in format
+ *                 `bsf1[=opt1=val1:opt2=val2][,bsf2]`
+ * @param[out] bsf Pointer to be set to newly created @ref AVBSFContext structure
+ *                 representing the chain of bitstream filters
+ *
+ * @return >=0 on success, negative AVERROR in case of failure
+ */
+av_bsf_list_parse_str_js_sync(str: string): number;
+/**
+ * Retrieve a filtered packet.
+ *
+ * @param ctx an initialized AVBSFContext
+ * @param[out] pkt this struct will be filled with the contents of the filtered
+ *                 packet. It is owned by the caller and must be freed using
+ *                 av_packet_unref() when it is no longer needed.
+ *                 This parameter should be "clean" (i.e. freshly allocated
+ *                 with av_packet_alloc() or unreffed with av_packet_unref())
+ *                 when this function is called. If this function returns
+ *                 successfully, the contents of pkt will be completely
+ *                 overwritten by the returned data. On failure, pkt is not
+ *                 touched.
  *
  * @return
- *         - >= 0 if a frame was successfully returned.
- *         - AVERROR(EAGAIN) if no frames are available at this point; more
- *           input frames must be added to the filtergraph to get more output.
- *         - AVERROR_EOF if there will be no more output frames on this sink.
- *         - A different negative AVERROR code in other failure cases.
+ *  - 0 on success.
+ *  - AVERROR(EAGAIN) if more packets need to be sent to the filter (using
+ *    av_bsf_send_packet()) to get more output.
+ *  - AVERROR_EOF if there will be no further output from the filter.
+ *  - Another negative AVERROR value if an error occurs.
+ *
+ * @note one input packet may result in several output packets, so after sending
+ * a packet with av_bsf_send_packet(), this function needs to be called
+ * repeatedly until it stops returning 0. It is also possible for a filter to
+ * output fewer packets than were sent to it, so this function may return
+ * AVERROR(EAGAIN) immediately after a successful av_bsf_send_packet() call.
  */
-av_buffersink_get_frame_sync(ctx: number,frame: number): number;
-av_buffersink_get_time_base_num_sync(a0: number): number;
-av_buffersink_get_time_base_den_sync(a0: number): number;
+av_bsf_receive_packet_sync(ctx: number,pkt: number): number;
 /**
- * Set the frame size for an audio buffer sink.
+ * Submit a packet for filtering.
  *
- * All calls to av_buffersink_get_buffer_ref will return a buffer with
- * exactly the specified number of samples, or AVERROR(EAGAIN) if there is
- * not enough. The last buffer at EOF will be padded with 0.
+ * After sending each packet, the filter must be completely drained by calling
+ * av_bsf_receive_packet() repeatedly until it returns AVERROR(EAGAIN) or
+ * AVERROR_EOF.
+ *
+ * @param ctx an initialized AVBSFContext
+ * @param pkt the packet to filter. The bitstream filter will take ownership of
+ * the packet and reset the contents of pkt. pkt is not touched if an error occurs.
+ * If pkt is empty (i.e. NULL, or pkt->data is NULL and pkt->side_data_elems zero),
+ * it signals the end of the stream (i.e. no more non-empty packets will be sent;
+ * sending more empty packets does nothing) and will cause the filter to output
+ * any packets it may have buffered internally.
+ *
+ * @return
+ *  - 0 on success.
+ *  - AVERROR(EAGAIN) if packets need to be retrieved from the filter (using
+ *    av_bsf_receive_packet()) before new input can be consumed.
+ *  - Another negative AVERROR value if an error occurs.
  */
-av_buffersink_set_frame_size_sync(ctx: number,frame_size: number): void;
-ff_buffersink_set_ch_layout_sync(a0: number,a1: number,a2: number): number;
+av_bsf_send_packet_sync(ctx: number,pkt: number): number;
+AVBSFContext_par_in_sync(ptr: number): number;
+AVBSFContext_par_in_s_sync(ptr: number,val: number): void;
+AVBSFContext_par_out_sync(ptr: number): number;
+AVBSFContext_par_out_s_sync(ptr: number,val: number): void;
+AVBSFContext_time_base_in_num_sync(ptr: number): number;
+AVBSFContext_time_base_in_den_sync(ptr: number): number;
+AVBSFContext_time_base_in_num_s_sync(ptr: number,val: number): number;
+AVBSFContext_time_base_in_den_s_sync(ptr: number,val: number): number;
+AVBSFContext_time_base_in_s_sync(ptr: number,num: number,den: number): number;
+AVBSFContext_time_base_out_num_sync(ptr: number): number;
+AVBSFContext_time_base_out_den_sync(ptr: number): number;
+AVBSFContext_time_base_out_num_s_sync(ptr: number,val: number): number;
+AVBSFContext_time_base_out_den_s_sync(ptr: number,val: number): number;
+AVBSFContext_time_base_out_s_sync(ptr: number,num: number,den: number): number;
+av_bsf_free_js_sync(ptr: number): void;
 /**
- * Add a frame to the buffer source.
- *
- * By default, if the frame is reference-counted, this function will take
- * ownership of the reference(s) and reset the frame. This can be controlled
- * using the flags.
- *
- * If this function returns an error, the input frame is not touched.
- *
- * @param buffer_src  pointer to a buffer source context
- * @param frame       a frame, or NULL to mark EOF
- * @param flags       a combination of AV_BUFFERSRC_FLAG_*
- * @return            >= 0 in case of success, a negative AVERROR code
- *                    in case of failure
+ * Bitstream-filter some number of packets.
+ * @param bsf  AVBSFContext(s), input
+ * @param pktPtr  AVPacket
+ * @param inPackets  Input packets
+ * @param config  Options. May be "true" to indicate end of stream.
  */
-av_buffersrc_add_frame_flags_sync(buffer_src: number,frame: number,flags: number): number;
+ff_bsf_multi_sync(
+    bsf: number, pktPtr: number, inPackets: (Packet | number)[],
+    config?: boolean | {
+        fin?: boolean,
+        copyoutPacket?: "default"
+    }
+): Packet[] | Promise<Packet[]>
+ff_bsf_multi_sync(
+    bsf: number, pktPtr: number, inPackets: (Packet | number)[],
+    config?: boolean | {
+        fin?: boolean,
+        copyoutPacket: "ptr"
+    }
+): number[] | Promise<number[]>;
 /**
- * Free a filter context. This will also remove the filter from its
- * filtergraph's list of filters.
+ * Find the "best" stream in the file.
+ * The best stream is determined according to various heuristics as the most
+ * likely to be what the user expects.
+ * If the decoder parameter is non-NULL, av_find_best_stream will find the
+ * default decoder for the stream's codec; streams for which no decoder can
+ * be found are ignored.
  *
- * @param filter the filter to free
+ * @param ic                media file handle
+ * @param type              stream type: video, audio, subtitles, etc.
+ * @param wanted_stream_nb  user-requested stream number,
+ *                          or -1 for automatic selection
+ * @param related_stream    try to find a stream related (eg. in the same
+ *                          program) to this one, or -1 if none
+ * @param decoder_ret       if non-NULL, returns the decoder for the
+ *                          selected stream
+ * @param flags             flags; none are currently defined
+ *
+ * @return  the non-negative stream number in case of success,
+ *          AVERROR_STREAM_NOT_FOUND if no stream with the requested type
+ *          could be found,
+ *          AVERROR_DECODER_NOT_FOUND if streams were found but no decoder
+ *
+ * @note  If av_find_best_stream returns successfully and decoder_ret is not
+ *        NULL, then *decoder_ret is guaranteed to be set to a valid AVCodec.
  */
-avfilter_free_sync(filter: number): void;
+av_find_best_stream_sync(ic: number,type: number,wanted_stream_nb: number,related_stream: number,decoder_ret: number,flags: number): number;
 /**
- * Get a filter definition matching the given name.
- *
- * @param name the filter name to find
- * @return     the filter definition, if any matching one is registered.
- *             NULL if none found.
+ * Find AVInputFormat based on the short name of the input format.
  */
-avfilter_get_by_name_sync(name: string): number;
+av_find_input_format_sync(short_name: string): number;
 /**
- * Allocate a filter graph.
- *
- * @return the allocated filter graph on success or NULL.
+ * Allocate an AVFormatContext.
+ * avformat_free_context() can be used to free the context and everything
+ * allocated by the framework within it.
  */
-avfilter_graph_alloc_sync(): number;
+avformat_alloc_context_sync(): number;
 /**
- * Check validity and configure all the links and formats in the graph.
+ * Allocate an AVFormatContext for an output format.
+ * avformat_free_context() can be used to free the context and
+ * everything allocated by the framework within it.
  *
- * @param graphctx the filter graph
- * @param log_ctx context used for logging
- * @return >= 0 in case of success, a negative AVERROR code otherwise
+ * @param ctx           pointee is set to the created format context,
+ *                      or to NULL in case of failure
+ * @param oformat       format to use for allocating the context, if NULL
+ *                      format_name and filename are used instead
+ * @param format_name   the name of output format to use for allocating the
+ *                      context, if NULL filename is used instead
+ * @param filename      the name of the filename to use for allocating the
+ *                      context, may be NULL
+ *
+ * @return  >= 0 in case of success, a negative AVERROR code in case of
+ *          failure
  */
-avfilter_graph_config_sync(graphctx: number,log_ctx: number): number;
+avformat_alloc_output_context2_js_sync(ctx: number,oformat: string,format_name: string): number;
 /**
- * Create and add a filter instance into an existing graph.
- * The filter instance is created from the filter filt and inited
- * with the parameter args. opaque is currently ignored.
- *
- * In case of success put in *filt_ctx the pointer to the created
- * filter instance, otherwise set *filt_ctx to NULL.
- *
- * @param name the instance name to give to the created filter instance
- * @param graph_ctx the filter graph
- * @return a negative AVERROR error code in case of failure, a non
- * negative value otherwise
+ * Close an opened input AVFormatContext. Free it and all its contents
+ * and set *s to NULL.
  */
-avfilter_graph_create_filter_js_sync(filt_ctx: number,filt: string,name: string,args: number,opaque: number): number;
+avformat_close_input_sync(s: number): void;
 /**
- * Free a graph, destroy its links, and set *graph to NULL.
- * If *graph is NULL, do nothing.
- */
-avfilter_graph_free_sync(graph: number): void;
-/**
- * Add a graph described by a string to a graph.
+ * Read packets of a media file to get stream information. This
+ * is useful for file formats with no headers such as MPEG. This
+ * function also computes the real framerate in case of MPEG-2 repeat
+ * frame mode.
+ * The logical file position is not changed by this function;
+ * examined packets may be buffered for later processing.
  *
- * @note The caller must provide the lists of inputs and outputs,
- * which therefore must be known before calling the function.
+ * @param ic media file handle
+ * @param options  If non-NULL, an ic.nb_streams long array of pointers to
+ *                 dictionaries, where i-th member contains options for
+ *                 codec corresponding to i-th stream.
+ *                 On return each dictionary will be filled with options that were not found.
+ * @return >=0 if OK, AVERROR_xxx on error
  *
- * @note The inputs parameter describes inputs of the already existing
- * part of the graph; i.e. from the point of view of the newly created
- * part, they are outputs. Similarly the outputs parameter describes
- * outputs of the already existing filters, which are provided as
- * inputs to the parsed filters.
+ * @note this function isn't guaranteed to open all the codecs, so
+ *       options being non-empty at return is a perfectly normal behavior.
  *
- * @param graph   the filter graph where to link the parsed graph context
- * @param filters string to be parsed
- * @param inputs  linked list to the inputs of the graph
- * @param outputs linked list to the outputs of the graph
- * @return zero on success, a negative AVERROR code on error
+ * @todo Let the user decide somehow what information is needed so that
+ *       we do not waste time getting stuff the user does not need.
  */
-avfilter_graph_parse_sync(graph: number,filters: string,inputs: number,outputs: number,log_ctx: number): number;
+avformat_find_stream_info_sync(ic: number,options: number): number | Promise<number>;
 /**
- * Allocate a single AVFilterInOut entry.
- * Must be freed with avfilter_inout_free().
- * @return allocated AVFilterInOut on success, NULL on failure.
- */
-avfilter_inout_alloc_sync(): number;
-/**
- * Free the supplied list of AVFilterInOut and set *inout to NULL.
- * If *inout is NULL, do nothing.
- */
-avfilter_inout_free_sync(inout: number): void;
-/**
- * Link two filters together.
+ * Discard all internally buffered data. This can be useful when dealing with
+ * discontinuities in the byte stream. Generally works only with formats that
+ * can resync. This includes headerless formats like MPEG-TS/TS but should also
+ * work with NUT, Ogg and in a limited way AVI for example.
  *
- * @param src    the source filter
- * @param srcpad index of the output pad on the source filter
- * @param dst    the destination filter
- * @param dstpad index of the input pad on the destination filter
- * @return       zero on success
+ * The set of streams, the detected duration, stream parameters and codecs do
+ * not change when calling this function. If you want a complete reset, it's
+ * better to open a new AVFormatContext.
+ *
+ * This does not flush the AVIOContext (s->pb). If necessary, call
+ * avio_flush(s->pb) before calling this function.
+ *
+ * @param s media file handle
+ * @return >=0 on success, error code otherwise
  */
-avfilter_link_sync(src: number,srcpad: number,dst: number,dstpad: number): number;
+avformat_flush_sync(s: number): number;
+/**
+ * Free an AVFormatContext and all its streams.
+ * @param s context to free
+ */
+avformat_free_context_sync(s: number): void;
+/**
+ * Add a new stream to a media file.
+ *
+ * When demuxing, it is called by the demuxer in read_header(). If the
+ * flag AVFMTCTX_NOHEADER is set in s.ctx_flags, then it may also
+ * be called in read_packet().
+ *
+ * When muxing, should be called by the user before avformat_write_header().
+ *
+ * User is required to call avformat_free_context() to clean up the allocation
+ * by avformat_new_stream().
+ *
+ * @param s media file handle
+ * @param c unused, does nothing
+ *
+ * @return newly created stream or NULL on error.
+ */
+avformat_new_stream_sync(s: number,c: number): number;
+/**
+ * Open an input stream and read the header. The codecs are not opened.
+ * The stream must be closed with avformat_close_input().
+ *
+ * @param ps       Pointer to user-supplied AVFormatContext (allocated by
+ *                 avformat_alloc_context). May be a pointer to NULL, in
+ *                 which case an AVFormatContext is allocated by this
+ *                 function and written into ps.
+ *                 Note that a user-supplied AVFormatContext will be freed
+ *                 on failure.
+ * @param url      URL of the stream to open.
+ * @param fmt      If non-NULL, this parameter forces a specific input format.
+ *                 Otherwise the format is autodetected.
+ * @param options  A dictionary filled with AVFormatContext and demuxer-private
+ *                 options.
+ *                 On return this parameter will be destroyed and replaced with
+ *                 a dict containing options that were not found. May be NULL.
+ *
+ * @return 0 on success, a negative AVERROR on failure.
+ *
+ * @note If you want to use custom IO, preallocate the format context and set its pb field.
+ */
+avformat_open_input_sync(ps: number,url: string,fmt: number,options: number): number | Promise<number>;
+/**
+ * Open an input stream and read the header. The codecs are not opened.
+ * The stream must be closed with avformat_close_input().
+ *
+ * @param ps       Pointer to user-supplied AVFormatContext (allocated by
+ *                 avformat_alloc_context). May be a pointer to NULL, in
+ *                 which case an AVFormatContext is allocated by this
+ *                 function and written into ps.
+ *                 Note that a user-supplied AVFormatContext will be freed
+ *                 on failure.
+ * @param url      URL of the stream to open.
+ * @param fmt      If non-NULL, this parameter forces a specific input format.
+ *                 Otherwise the format is autodetected.
+ * @param options  A dictionary filled with AVFormatContext and demuxer-private
+ *                 options.
+ *                 On return this parameter will be destroyed and replaced with
+ *                 a dict containing options that were not found. May be NULL.
+ *
+ * @return 0 on success, a negative AVERROR on failure.
+ *
+ * @note If you want to use custom IO, preallocate the format context and set its pb field.
+ */
+avformat_open_input_js_sync(ps: string,url: number,fmt: number): number | Promise<number>;
+/**
+ * Allocate the stream private data and write the stream header to
+ * an output media file.
+ *
+ * @param s        Media file handle, must be allocated with
+ *                 avformat_alloc_context().
+ *                 Its \ref AVFormatContext.oformat "oformat" field must be set
+ *                 to the desired output format;
+ *                 Its \ref AVFormatContext.pb "pb" field must be set to an
+ *                 already opened ::AVIOContext.
+ * @param options  An ::AVDictionary filled with AVFormatContext and
+ *                 muxer-private options.
+ *                 On return this parameter will be destroyed and replaced with
+ *                 a dict containing options that were not found. May be NULL.
+ *
+ * @retval AVSTREAM_INIT_IN_WRITE_HEADER On success, if the codec had not already been
+ *                                       fully initialized in avformat_init_output().
+ * @retval AVSTREAM_INIT_IN_INIT_OUTPUT  On success, if the codec had already been fully
+ *                                       initialized in avformat_init_output().
+ * @retval AVERROR                       A negative AVERROR on failure.
+ *
+ * @see av_opt_find, av_dict_set, avio_open, av_oformat_next, avformat_init_output.
+ */
+avformat_write_header_sync(s: number,options: number): number;
+/**
+ * Write a packet to an output media file ensuring correct interleaving.
+ *
+ * This function will buffer the packets internally as needed to make sure the
+ * packets in the output file are properly interleaved, usually ordered by
+ * increasing dts. Callers doing their own interleaving should call
+ * av_write_frame() instead of this function.
+ *
+ * Using this function instead of av_write_frame() can give muxers advance
+ * knowledge of future packets, improving e.g. the behaviour of the mp4
+ * muxer for VFR content in fragmenting mode.
+ *
+ * @param s media file handle
+ * @param pkt The packet containing the data to be written.
+ *            <br>
+ *            If the packet is reference-counted, this function will take
+ *            ownership of this reference and unreference it later when it sees
+ *            fit. If the packet is not reference-counted, libavformat will
+ *            make a copy.
+ *            The returned packet will be blank (as if returned from
+ *            av_packet_alloc()), even on error.
+ *            <br>
+ *            This parameter can be NULL (at any time, not just at the end), to
+ *            flush the interleaving queues.
+ *            <br>
+ *            Packet's @ref AVPacket.stream_index "stream_index" field must be
+ *            set to the index of the corresponding stream in @ref
+ *            AVFormatContext.streams "s->streams".
+ *            <br>
+ *            The timestamps (@ref AVPacket.pts "pts", @ref AVPacket.dts "dts")
+ *            must be set to correct values in the stream's timebase (unless the
+ *            output format is flagged with the AVFMT_NOTIMESTAMPS flag, then
+ *            they can be set to AV_NOPTS_VALUE).
+ *            The dts for subsequent packets in one stream must be strictly
+ *            increasing (unless the output format is flagged with the
+ *            AVFMT_TS_NONSTRICT, then they merely have to be nondecreasing).
+ *            @ref AVPacket.duration "duration" should also be set if known.
+ *
+ * @return 0 on success, a negative AVERROR on error.
+ *
+ * @see av_write_frame(), AVFormatContext.max_interleave_delta
+ */
+av_interleaved_write_frame_sync(s: number,pkt: number): number;
+/**
+ * Create and initialize a AVIOContext for accessing the
+ * resource indicated by url.
+ * @note When the resource indicated by url has been opened in
+ * read+write mode, the AVIOContext can be used only for writing.
+ *
+ * @param s Used to return the pointer to the created AVIOContext.
+ * In case of failure the pointed to value is set to NULL.
+ * @param url resource to access
+ * @param flags flags which control how the resource indicated by url
+ * is to be opened
+ * @param int_cb an interrupt callback to be used at the protocols level
+ * @param options  A dictionary filled with protocol-private options. On return
+ * this parameter will be destroyed and replaced with a dict containing options
+ * that were not found. May be NULL.
+ * @return >= 0 in case of success, a negative value corresponding to an
+ * AVERROR code in case of failure
+ */
+avio_open2_js_sync(s: string,url: number,flags: number,int_cb: number): number;
+/**
+ * Close the resource accessed by the AVIOContext s and free it.
+ * This function can only be used if s was opened by avio_open().
+ *
+ * The internal buffer is automatically flushed before closing the
+ * resource.
+ *
+ * @return 0 on success, an AVERROR < 0 on error.
+ * @see avio_closep
+ */
+avio_close_sync(s: number): number;
+/**
+ * Force flushing of buffered data.
+ *
+ * For write streams, force the buffered data to be immediately written to the output,
+ * without to wait to fill the internal buffer.
+ *
+ * For read streams, discard all currently buffered data, and advance the
+ * reported file position to that of the underlying stream. This does not
+ * read new data, and does not perform any seeks.
+ */
+avio_flush_sync(s: number): void;
+/**
+ * Return the next frame of a stream.
+ * This function returns what is stored in the file, and does not validate
+ * that what is there are valid frames for the decoder. It will split what is
+ * stored in the file into frames and return one for each call. It will not
+ * omit invalid data between valid frames so as to give the decoder the maximum
+ * information possible for decoding.
+ *
+ * On success, the returned packet is reference-counted (pkt->buf is set) and
+ * valid indefinitely. The packet must be freed with av_packet_unref() when
+ * it is no longer needed. For video, the packet contains exactly one frame.
+ * For audio, it contains an integer number of frames if each frame has
+ * a known fixed size (e.g. PCM or ADPCM data). If the audio frames have
+ * a variable size (e.g. MPEG audio), then it contains one frame.
+ *
+ * pkt->pts, pkt->dts and pkt->duration are always set to correct
+ * values in AVStream.time_base units (and guessed if the format cannot
+ * provide them). pkt->pts can be AV_NOPTS_VALUE if the video format
+ * has B-frames, so it is better to rely on pkt->dts if you do not
+ * decompress the payload.
+ *
+ * @return 0 if OK, < 0 on error or end of file. On error, pkt will be blank
+ *         (as if it came from av_packet_alloc()).
+ *
+ * @note pkt will be initialized, so it may be uninitialized, but it must not
+ *       contain data that needs to be freed.
+ */
+av_read_frame_sync(s: number,pkt: number): number | Promise<number>;
+/**
+ * Write a packet to an output media file.
+ *
+ * This function passes the packet directly to the muxer, without any buffering
+ * or reordering. The caller is responsible for correctly interleaving the
+ * packets if the format requires it. Callers that want libavformat to handle
+ * the interleaving should call av_interleaved_write_frame() instead of this
+ * function.
+ *
+ * @param s media file handle
+ * @param pkt The packet containing the data to be written. Note that unlike
+ *            av_interleaved_write_frame(), this function does not take
+ *            ownership of the packet passed to it (though some muxers may make
+ *            an internal reference to the input packet).
+ *            <br>
+ *            This parameter can be NULL (at any time, not just at the end), in
+ *            order to immediately flush data buffered within the muxer, for
+ *            muxers that buffer up data internally before writing it to the
+ *            output.
+ *            <br>
+ *            Packet's @ref AVPacket.stream_index "stream_index" field must be
+ *            set to the index of the corresponding stream in @ref
+ *            AVFormatContext.streams "s->streams".
+ *            <br>
+ *            The timestamps (@ref AVPacket.pts "pts", @ref AVPacket.dts "dts")
+ *            must be set to correct values in the stream's timebase (unless the
+ *            output format is flagged with the AVFMT_NOTIMESTAMPS flag, then
+ *            they can be set to AV_NOPTS_VALUE).
+ *            The dts for subsequent packets passed to this function must be strictly
+ *            increasing when compared in their respective timebases (unless the
+ *            output format is flagged with the AVFMT_TS_NONSTRICT, then they
+ *            merely have to be nondecreasing).  @ref AVPacket.duration
+ *            "duration") should also be set if known.
+ * @return < 0 on error, = 0 if OK, 1 if flushed and there is no more data to flush
+ *
+ * @see av_interleaved_write_frame()
+ */
+av_write_frame_sync(s: number,pkt: number): number;
+/**
+ * Write the stream trailer to an output media file and free the
+ * file private data.
+ *
+ * May only be called after a successful call to avformat_write_header.
+ *
+ * @param s media file handle
+ * @return 0 if OK, AVERROR_xxx on error
+ */
+av_write_trailer_sync(s: number): number;
+LIBAVFORMAT_VERSION_INT_sync(): number;
+AVFormatContext_duration_sync(ptr: number): number;
+AVFormatContext_duration_s_sync(ptr: number,val: number): void;
+AVFormatContext_durationhi_sync(ptr: number): number;
+AVFormatContext_durationhi_s_sync(ptr: number,val: number): void;
+AVFormatContext_flags_sync(ptr: number): number;
+AVFormatContext_flags_s_sync(ptr: number,val: number): void;
+AVFormatContext_nb_streams_sync(ptr: number): number;
+AVFormatContext_nb_streams_s_sync(ptr: number,val: number): void;
+AVFormatContext_oformat_sync(ptr: number): number;
+AVFormatContext_oformat_s_sync(ptr: number,val: number): void;
+AVFormatContext_pb_sync(ptr: number): number;
+AVFormatContext_pb_s_sync(ptr: number,val: number): void;
+AVFormatContext_start_time_sync(ptr: number): number;
+AVFormatContext_start_time_s_sync(ptr: number,val: number): void;
+AVFormatContext_start_timehi_sync(ptr: number): number;
+AVFormatContext_start_timehi_s_sync(ptr: number,val: number): void;
+AVFormatContext_streams_a_sync(ptr: number,idx: number): number;
+AVFormatContext_streams_a_s_sync(ptr: number,idx: number,val: number): void;
+AVStream_codecpar_sync(ptr: number): number;
+AVStream_codecpar_s_sync(ptr: number,val: number): void;
+AVStream_discard_sync(ptr: number): number;
+AVStream_discard_s_sync(ptr: number,val: number): void;
+AVStream_duration_sync(ptr: number): number;
+AVStream_duration_s_sync(ptr: number,val: number): void;
+AVStream_durationhi_sync(ptr: number): number;
+AVStream_durationhi_s_sync(ptr: number,val: number): void;
+AVStream_time_base_num_sync(ptr: number): number;
+AVStream_time_base_den_sync(ptr: number): number;
+AVStream_time_base_num_s_sync(ptr: number,val: number): number;
+AVStream_time_base_den_s_sync(ptr: number,val: number): number;
+AVStream_time_base_s_sync(ptr: number,num: number,den: number): number;
+avformat_close_input_js_sync(ptr: number): void;
+/**
+ * Read a complete file from the in-memory filesystem.
+ * @param name  Filename to read
+ */
+readFile_sync(name: string): Uint8Array;
+/**
+ * Write a complete file to the in-memory filesystem.
+ * @param name  Filename to write
+ * @param content  Content to write to the file
+ */
+writeFile_sync(name: string, content: Uint8Array): Uint8Array;
+/**
+ * Delete a file in the in-memory filesystem.
+ * @param name  Filename to delete
+ */
+unlink_sync(name: string): void;
+/**
+ * Unmount a mounted filesystem.
+ * @param mountpoint  Path where the filesystem is mounted
+ */
+unmount_sync(mountpoint: string): void;
+/**
+ * Make a lazy file. Direct link to createLazyFile.
+ */
+createLazyFile_sync(
+    parent: string, name: string, url: string, canRead: boolean,
+    canWrite: boolean
+): void;
+/**
+ * Make a reader device.
+ * @param name  Filename to create.
+ * @param mode  Unix permissions (pointless since this is an in-memory
+ *              filesystem)
+ */
+mkreaderdev_sync(name: string, mode?: number): void;
+/**
+ * Make a block reader "device". Technically a file that we then hijack to have
+ * our behavior.
+ * @param name  Filename to create.
+ * @param size  Size of the device to present.
+ */
+mkblockreaderdev_sync(name: string, size: number): void;
+/**
+ * Make a readahead device. This reads a File (or other Blob) and attempts to
+ * read ahead of whatever libav actually asked for. Note that this overrides
+ * onblockread, so if you want to support both kinds of files, make sure you set
+ * onblockread before calling this.
+ * @param name  Filename to create.
+ * @param file  Blob or file to read.
+ */
+mkreadaheadfile_sync(name: string, file: Blob): void;
+/**
+ * Unlink a readahead file. Also gets rid of the File reference.
+ * @param name  Filename to unlink.
+ */
+unlinkreadaheadfile_sync(name: string): void;
+/**
+ * Make a writer device.
+ * @param name  Filename to create
+ * @param mode  Unix permissions
+ */
+mkwriterdev_sync(name: string, mode?: number): void;
+/**
+ * Make a stream writer device. The same as a writer device but does not allow
+ * seeking.
+ * @param name  Filename to create
+ * @param mode  Unix permissions
+ */
+mkstreamwriterdev_sync(name: string, mode?: number): void;
+/**
+ * Mount a writer *filesystem*. All files created in this filesystem will be
+ * redirected as writers. The directory will be created for you if it doesn't
+ * already exist, but it may already exist.
+ * @param mountpoint  Directory to mount as a writer filesystem
+ */
+mountwriterfs_sync(mountpoint: string): void;
+/**
+ * Make a workerfs file. Returns the filename that it's mounted to.
+ * @param name  Filename to use.
+ * @param blob  Blob to load at that file.
+ */
+mkworkerfsfile_sync(name: string, blob: Blob): string;
+/**
+ * Unmount (unmake) a workerfs file. Give the *original name you provided*, not
+ * the name mkworkerfsfile returned.
+ * @param name  Filename to unmount.
+ */
+unlinkworkerfsfile_sync(name: string): void;
+/**
+ * Make a FileSystemFileHandle device. This writes via a FileSystemFileHandle,
+ * synchronously if possible. Note that this overrides onwrite, so if you want
+ * to support both kinds of files, make sure you set onwrite before calling
+ * this.
+ * @param name  Filename to create.
+ * @param fsfh  FileSystemFileHandle corresponding to this filename.
+ */
+mkfsfhfile(name: string, fsfh: FileSystemFileHandle): Promise<void>;
+/**
+ * Unlink a FileSystemFileHandle file. Also closes the file handle.
+ * @param name  Filename to unlink.
+ */
+unlinkfsfhfile(name: string): Promise<void>;
+/**
+ * Send some data to a reader device. To indicate EOF, send null. To indicate an
+ * error, send EOF and include an error code in the options.
+ * @param name  Filename of the reader device.
+ * @param data  Data to send.
+ * @param opts  Optional send options, such as an error code.
+ */
+ff_reader_dev_send_sync(
+    name: string, data: Uint8Array | null,
+    opts?: {
+        errorCode?: number,
+        error?: any // any other error, used internally
+    }
+): void;
+/**
+ * Send some data to a block reader device. To indicate EOF, send null (but note
+ * that block read devices have a fixed size, and will automatically send EOF
+ * for reads outside of that size, so you should not normally need to send EOF).
+ * To indicate an error, send EOF and include an error code in the options.
+ * @param name  Filename of the reader device.
+ * @param pos  Position of the data in the file.
+ * @param data  Data to send.
+ * @param opts  Optional send options, such as an error code.
+ */
+ff_block_reader_dev_send_sync(
+    name: string, pos: number, data: Uint8Array | null,
+    opts?: {
+        errorCode?: number,
+        error?: any // any other error, used internally
+    }
+): void;
+/**
+ * @deprecated
+ * DEPRECATED. Use the onread callback.
+ * Metafunction to determine whether any device has any waiters. This can be
+ * used to determine whether more data needs to be sent before a previous step
+ * will be fully resolved.
+ * @param name  Optional name of file to check for waiters
+ */
+ff_reader_dev_waiting_sync(name?: string): boolean;
+/**
+ * Initialize a muxer format, format context and some number of streams.
+ * Returns [AVFormatContext, AVOutputFormat, AVIOContext, AVStream[]]
+ * @param opts  Muxer options
+ * @param stramCtxs  Context info for each stream to mux
+ */
+ff_init_muxer_sync(
+    opts: {
+        oformat?: number, // format pointer
+        format_name?: string, // libav name
+        filename?: string,
+        device?: boolean, // Create a writer device
+        open?: boolean, // Open the file for writing
+        codecpars?: boolean // Streams is in terms of codecpars, not codecctx
+    },
+    streamCtxs: [number, number, number][] // AVCodecContext | AVCodecParameters, time_base_num, time_base_den
+): [number, number, number, number[]];
+/**
+ * Free up a muxer format and/or file
+ * @param oc  AVFormatContext
+ * @param pb  AVIOContext
+ */
+ff_free_muxer_sync(oc: number, pb: number): void;
+/**
+ * Initialize a demuxer from a file and format context, and get the list of
+ * codecs/types.
+ * Returns [AVFormatContext, Stream[]]
+ * @param filename  Filename to open
+ * @param fmt  Format to use (optional)
+ */
+ff_init_demuxer_file_sync(
+    filename: string, fmt?: string
+): [number, Stream[]] | Promise<[number, Stream[]]>;
+/**
+ * Write some number of packets at once.
+ * @param oc  AVFormatContext
+ * @param pkt  AVPacket
+ * @param inPackets  Packets to write
+ * @param interleave  Set to false to *not* use the interleaved writer.
+ *                    Interleaving is the default.
+ */
+ff_write_multi_sync(
+    oc: number, pkt: number, inPackets: (Packet | number)[], interleave?: boolean
+): void;
+/**
+ * Read many packets at once. If you don't set any limits, this function will
+ * block (asynchronously) until the whole file is read, so make sure you set
+ * some limits if you want to read a bit at a time. Returns a pair [result,
+ * packets], where the result indicates whether an error was encountered, an
+ * EOF, or simply limits (EAGAIN), and packets is a dictionary indexed by the
+ * stream number in which each element is an array of packets from that stream.
+ * @param fmt_ctx  AVFormatContext
+ * @param pkt  AVPacket
+ * @param opts  Other options
+ */
+ff_read_frame_multi_sync(
+    fmt_ctx: number, pkt: number, opts?: {
+        limit?: number, // OUTPUT limit, in bytes
+        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
+        copyoutPacket?: "default" // Version of ff_copyout_packet to use
+    }
+): [number, Record<number, Packet[]>] | Promise<[number, Record<number, Packet[]>]>
+ff_read_frame_multi_sync(
+    fmt_ctx: number, pkt: number, opts: {
+        limit?: number, // OUTPUT limit, in bytes
+        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
+        copyoutPacket: "ptr" // Version of ff_copyout_packet to use
+    }
+): [number, Record<number, number[]>] | Promise<[number, Record<number, number[]>]>;
+/**
+ * @deprecated
+ * DEPRECATED. Use `ff_read_frame_multi`.
+ * Read many packets at once. This older API is now deprecated. The devfile
+ * parameter is unused and unsupported. Dev files should be used via the normal
+ * `ff_reader_dev_waiting` API, rather than counting on device file limits, as
+ * this function used to.
+ * @param fmt_ctx  AVFormatContext
+ * @param pkt  AVPacket
+ * @param devfile  Unused
+ * @param opts  Other options
+ */
+ff_read_multi_sync(
+    fmt_ctx: number, pkt: number, devfile?: string | null, opts?: {
+        limit?: number, // OUTPUT limit, in bytes
+        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
+        copyoutPacket?: "default" // Version of ff_copyout_packet to use
+    }
+): [number, Record<number, Packet[]>] | Promise<[number, Record<number, Packet[]>]>
+ff_read_multi_sync(
+    fmt_ctx: number, pkt: number, devfile: string | null, opts: {
+        limit?: number, // OUTPUT limit, in bytes
+        devLimit?: number, // INPUT limit, in bytes (don't read if less than this much data is available)
+        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
+        copyoutPacket: "ptr" // Version of ff_copyout_packet to use
+    }
+): [number, Record<number, number[]>] | Promise<[number, Record<number, number[]>]>;
 /**
  * Allocate an AVCodecContext and set its fields to default values. The
  * resulting struct should be freed with avcodec_free_context().
@@ -3094,37 +4278,6 @@ avfilter_link_sync(src: number,srcpad: number,dst: number,dstpad: number): numbe
  * @return An AVCodecContext filled with default values or NULL on failure.
  */
 avcodec_alloc_context3_sync(codec: number): number;
-/**
- * Close a given AVCodecContext and free all the data associated with it
- * (but not the AVCodecContext itself).
- *
- * Calling this function on an AVCodecContext that hasn't been opened will free
- * the codec-specific data allocated in avcodec_alloc_context3() with a non-NULL
- * codec. Subsequent calls will do nothing.
- *
- * @deprecated Do not use this function. Use avcodec_free_context() to destroy a
- * codec context (either open or closed). Opening and closing a codec context
- * multiple times is not supported anymore -- use multiple codec contexts
- * instead.
- */
-avcodec_close_sync(avctx: number): number;
-/**
- * @return descriptor for given codec ID or NULL if no descriptor exists.
- */
-avcodec_descriptor_get_sync(id: number): number;
-/**
- * @return codec descriptor with the given name or NULL if no such descriptor
- *         exists.
- */
-avcodec_descriptor_get_by_name_sync(name: string): number;
-/**
- * Iterate over all codec descriptors known to libavcodec.
- *
- * @param prev previous descriptor. NULL to get the first descriptor.
- *
- * @return next descriptor or NULL after the last descriptor
- */
-avcodec_descriptor_next_sync(prev: number): number;
 /**
  * Find a registered decoder with a matching codec ID.
  *
@@ -3153,6 +4306,21 @@ avcodec_find_encoder_sync(id: number): number;
  * @return An encoder if one was found, NULL otherwise.
  */
 avcodec_find_encoder_by_name_sync(name: string): number;
+/**
+ * Reset the internal codec state / flush internal buffers. Should be called
+ * e.g. when seeking or when switching to a different stream.
+ *
+ * @note for decoders, this function just releases any references the decoder
+ * might keep internally, but the caller's references remain valid.
+ *
+ * @note for encoders, this function will only do something if the encoder
+ * declares support for AV_CODEC_CAP_ENCODER_FLUSH. When called, the encoder
+ * will drain any remaining packets, and can then be re-used for a different
+ * stream (as opposed to sending a null frame which will leave the encoder
+ * in a permanent EOF state after draining). This can be desirable if the
+ * cost of tearing down and replacing the encoder instance is high.
+ */
+avcodec_flush_buffers_sync(avctx: number): void;
 /**
  * Free the codec context and everything associated with it and write NULL to
  * the provided pointer.
@@ -3440,919 +4608,102 @@ avcodec_send_frame_sync(avctx: number,frame: number): number;
  * @retval "another negative error code" legitimate decoding errors
  */
 avcodec_send_packet_sync(avctx: number,avpkt: number): number;
-/**
- * Find AVInputFormat based on the short name of the input format.
- */
-av_find_input_format_sync(short_name: string): number;
-/**
- * Allocate an AVFormatContext.
- * avformat_free_context() can be used to free the context and everything
- * allocated by the framework within it.
- */
-avformat_alloc_context_sync(): number;
-/**
- * Allocate an AVFormatContext for an output format.
- * avformat_free_context() can be used to free the context and
- * everything allocated by the framework within it.
- *
- * @param ctx           pointee is set to the created format context,
- *                      or to NULL in case of failure
- * @param oformat       format to use for allocating the context, if NULL
- *                      format_name and filename are used instead
- * @param format_name   the name of output format to use for allocating the
- *                      context, if NULL filename is used instead
- * @param filename      the name of the filename to use for allocating the
- *                      context, may be NULL
- *
- * @return  >= 0 in case of success, a negative AVERROR code in case of
- *          failure
- */
-avformat_alloc_output_context2_js_sync(ctx: number,oformat: string,format_name: string): number;
-/**
- * Close an opened input AVFormatContext. Free it and all its contents
- * and set *s to NULL.
- */
-avformat_close_input_sync(s: number): void;
-/**
- * Read packets of a media file to get stream information. This
- * is useful for file formats with no headers such as MPEG. This
- * function also computes the real framerate in case of MPEG-2 repeat
- * frame mode.
- * The logical file position is not changed by this function;
- * examined packets may be buffered for later processing.
- *
- * @param ic media file handle
- * @param options  If non-NULL, an ic.nb_streams long array of pointers to
- *                 dictionaries, where i-th member contains options for
- *                 codec corresponding to i-th stream.
- *                 On return each dictionary will be filled with options that were not found.
- * @return >=0 if OK, AVERROR_xxx on error
- *
- * @note this function isn't guaranteed to open all the codecs, so
- *       options being non-empty at return is a perfectly normal behavior.
- *
- * @todo Let the user decide somehow what information is needed so that
- *       we do not waste time getting stuff the user does not need.
- */
-avformat_find_stream_info_sync(ic: number,options: number): number | Promise<number>;
-/**
- * Discard all internally buffered data. This can be useful when dealing with
- * discontinuities in the byte stream. Generally works only with formats that
- * can resync. This includes headerless formats like MPEG-TS/TS but should also
- * work with NUT, Ogg and in a limited way AVI for example.
- *
- * The set of streams, the detected duration, stream parameters and codecs do
- * not change when calling this function. If you want a complete reset, it's
- * better to open a new AVFormatContext.
- *
- * This does not flush the AVIOContext (s->pb). If necessary, call
- * avio_flush(s->pb) before calling this function.
- *
- * @param s media file handle
- * @return >=0 on success, error code otherwise
- */
-avformat_flush_sync(s: number): number;
-/**
- * Free an AVFormatContext and all its streams.
- * @param s context to free
- */
-avformat_free_context_sync(s: number): void;
-/**
- * Add a new stream to a media file.
- *
- * When demuxing, it is called by the demuxer in read_header(). If the
- * flag AVFMTCTX_NOHEADER is set in s.ctx_flags, then it may also
- * be called in read_packet().
- *
- * When muxing, should be called by the user before avformat_write_header().
- *
- * User is required to call avformat_free_context() to clean up the allocation
- * by avformat_new_stream().
- *
- * @param s media file handle
- * @param c unused, does nothing
- *
- * @return newly created stream or NULL on error.
- */
-avformat_new_stream_sync(s: number,c: number): number;
-/**
- * Open an input stream and read the header. The codecs are not opened.
- * The stream must be closed with avformat_close_input().
- *
- * @param ps       Pointer to user-supplied AVFormatContext (allocated by
- *                 avformat_alloc_context). May be a pointer to NULL, in
- *                 which case an AVFormatContext is allocated by this
- *                 function and written into ps.
- *                 Note that a user-supplied AVFormatContext will be freed
- *                 on failure.
- * @param url      URL of the stream to open.
- * @param fmt      If non-NULL, this parameter forces a specific input format.
- *                 Otherwise the format is autodetected.
- * @param options  A dictionary filled with AVFormatContext and demuxer-private
- *                 options.
- *                 On return this parameter will be destroyed and replaced with
- *                 a dict containing options that were not found. May be NULL.
- *
- * @return 0 on success, a negative AVERROR on failure.
- *
- * @note If you want to use custom IO, preallocate the format context and set its pb field.
- */
-avformat_open_input_sync(ps: number,url: string,fmt: number,options: number): number | Promise<number>;
-/**
- * Open an input stream and read the header. The codecs are not opened.
- * The stream must be closed with avformat_close_input().
- *
- * @param ps       Pointer to user-supplied AVFormatContext (allocated by
- *                 avformat_alloc_context). May be a pointer to NULL, in
- *                 which case an AVFormatContext is allocated by this
- *                 function and written into ps.
- *                 Note that a user-supplied AVFormatContext will be freed
- *                 on failure.
- * @param url      URL of the stream to open.
- * @param fmt      If non-NULL, this parameter forces a specific input format.
- *                 Otherwise the format is autodetected.
- * @param options  A dictionary filled with AVFormatContext and demuxer-private
- *                 options.
- *                 On return this parameter will be destroyed and replaced with
- *                 a dict containing options that were not found. May be NULL.
- *
- * @return 0 on success, a negative AVERROR on failure.
- *
- * @note If you want to use custom IO, preallocate the format context and set its pb field.
- */
-avformat_open_input_js_sync(ps: string,url: number,fmt: number): number | Promise<number>;
-/**
- * Allocate the stream private data and write the stream header to
- * an output media file.
- *
- * @param s        Media file handle, must be allocated with
- *                 avformat_alloc_context().
- *                 Its \ref AVFormatContext.oformat "oformat" field must be set
- *                 to the desired output format;
- *                 Its \ref AVFormatContext.pb "pb" field must be set to an
- *                 already opened ::AVIOContext.
- * @param options  An ::AVDictionary filled with AVFormatContext and
- *                 muxer-private options.
- *                 On return this parameter will be destroyed and replaced with
- *                 a dict containing options that were not found. May be NULL.
- *
- * @retval AVSTREAM_INIT_IN_WRITE_HEADER On success, if the codec had not already been
- *                                       fully initialized in avformat_init_output().
- * @retval AVSTREAM_INIT_IN_INIT_OUTPUT  On success, if the codec had already been fully
- *                                       initialized in avformat_init_output().
- * @retval AVERROR                       A negative AVERROR on failure.
- *
- * @see av_opt_find, av_dict_set, avio_open, av_oformat_next, avformat_init_output.
- */
-avformat_write_header_sync(s: number,options: number): number;
-/**
- * Create and initialize a AVIOContext for accessing the
- * resource indicated by url.
- * @note When the resource indicated by url has been opened in
- * read+write mode, the AVIOContext can be used only for writing.
- *
- * @param s Used to return the pointer to the created AVIOContext.
- * In case of failure the pointed to value is set to NULL.
- * @param url resource to access
- * @param flags flags which control how the resource indicated by url
- * is to be opened
- * @param int_cb an interrupt callback to be used at the protocols level
- * @param options  A dictionary filled with protocol-private options. On return
- * this parameter will be destroyed and replaced with a dict containing options
- * that were not found. May be NULL.
- * @return >= 0 in case of success, a negative value corresponding to an
- * AVERROR code in case of failure
- */
-avio_open2_js_sync(s: string,url: number,flags: number,int_cb: number): number;
-/**
- * Close the resource accessed by the AVIOContext s and free it.
- * This function can only be used if s was opened by avio_open().
- *
- * The internal buffer is automatically flushed before closing the
- * resource.
- *
- * @return 0 on success, an AVERROR < 0 on error.
- * @see avio_closep
- */
-avio_close_sync(s: number): number;
-/**
- * Force flushing of buffered data.
- *
- * For write streams, force the buffered data to be immediately written to the output,
- * without to wait to fill the internal buffer.
- *
- * For read streams, discard all currently buffered data, and advance the
- * reported file position to that of the underlying stream. This does not
- * read new data, and does not perform any seeks.
- */
-avio_flush_sync(s: number): void;
-/**
- * Find the "best" stream in the file.
- * The best stream is determined according to various heuristics as the most
- * likely to be what the user expects.
- * If the decoder parameter is non-NULL, av_find_best_stream will find the
- * default decoder for the stream's codec; streams for which no decoder can
- * be found are ignored.
- *
- * @param ic                media file handle
- * @param type              stream type: video, audio, subtitles, etc.
- * @param wanted_stream_nb  user-requested stream number,
- *                          or -1 for automatic selection
- * @param related_stream    try to find a stream related (eg. in the same
- *                          program) to this one, or -1 if none
- * @param decoder_ret       if non-NULL, returns the decoder for the
- *                          selected stream
- * @param flags             flags; none are currently defined
- *
- * @return  the non-negative stream number in case of success,
- *          AVERROR_STREAM_NOT_FOUND if no stream with the requested type
- *          could be found,
- *          AVERROR_DECODER_NOT_FOUND if streams were found but no decoder
- *
- * @note  If av_find_best_stream returns successfully and decoder_ret is not
- *        NULL, then *decoder_ret is guaranteed to be set to a valid AVCodec.
- */
-av_find_best_stream_sync(ic: number,type: number,wanted_stream_nb: number,related_stream: number,decoder_ret: number,flags: number): number;
-/**
- * Return the name of sample_fmt, or NULL if sample_fmt is not
- * recognized.
- */
-av_get_sample_fmt_name_sync(sample_fmt: number): string;
-/**
- * Increase packet size, correctly zeroing padding
- *
- * @param pkt packet
- * @param grow_by number of bytes by which to increase the size of the packet
- */
-av_grow_packet_sync(pkt: number,grow_by: number): number;
-/**
- * Write a packet to an output media file ensuring correct interleaving.
- *
- * This function will buffer the packets internally as needed to make sure the
- * packets in the output file are properly interleaved, usually ordered by
- * increasing dts. Callers doing their own interleaving should call
- * av_write_frame() instead of this function.
- *
- * Using this function instead of av_write_frame() can give muxers advance
- * knowledge of future packets, improving e.g. the behaviour of the mp4
- * muxer for VFR content in fragmenting mode.
- *
- * @param s media file handle
- * @param pkt The packet containing the data to be written.
- *            <br>
- *            If the packet is reference-counted, this function will take
- *            ownership of this reference and unreference it later when it sees
- *            fit. If the packet is not reference-counted, libavformat will
- *            make a copy.
- *            The returned packet will be blank (as if returned from
- *            av_packet_alloc()), even on error.
- *            <br>
- *            This parameter can be NULL (at any time, not just at the end), to
- *            flush the interleaving queues.
- *            <br>
- *            Packet's @ref AVPacket.stream_index "stream_index" field must be
- *            set to the index of the corresponding stream in @ref
- *            AVFormatContext.streams "s->streams".
- *            <br>
- *            The timestamps (@ref AVPacket.pts "pts", @ref AVPacket.dts "dts")
- *            must be set to correct values in the stream's timebase (unless the
- *            output format is flagged with the AVFMT_NOTIMESTAMPS flag, then
- *            they can be set to AV_NOPTS_VALUE).
- *            The dts for subsequent packets in one stream must be strictly
- *            increasing (unless the output format is flagged with the
- *            AVFMT_TS_NONSTRICT, then they merely have to be nondecreasing).
- *            @ref AVPacket.duration "duration" should also be set if known.
- *
- * @return 0 on success, a negative AVERROR on error.
- *
- * @see av_write_frame(), AVFormatContext.max_interleave_delta
- */
-av_interleaved_write_frame_sync(s: number,pkt: number): number;
-/**
- * Create a writable reference for the data described by a given packet,
- * avoiding data copy if possible.
- *
- * @param pkt Packet whose data should be made writable.
- *
- * @return 0 on success, a negative AVERROR on failure. On failure, the
- *         packet is unchanged.
- */
-av_packet_make_writable_sync(pkt: number): number;
-/**
- * @return a pixel format descriptor for provided pixel format or NULL if
- * this pixel format is unknown.
- */
-av_pix_fmt_desc_get_sync(pix_fmt: number): number;
-/**
- * Return the next frame of a stream.
- * This function returns what is stored in the file, and does not validate
- * that what is there are valid frames for the decoder. It will split what is
- * stored in the file into frames and return one for each call. It will not
- * omit invalid data between valid frames so as to give the decoder the maximum
- * information possible for decoding.
- *
- * On success, the returned packet is reference-counted (pkt->buf is set) and
- * valid indefinitely. The packet must be freed with av_packet_unref() when
- * it is no longer needed. For video, the packet contains exactly one frame.
- * For audio, it contains an integer number of frames if each frame has
- * a known fixed size (e.g. PCM or ADPCM data). If the audio frames have
- * a variable size (e.g. MPEG audio), then it contains one frame.
- *
- * pkt->pts, pkt->dts and pkt->duration are always set to correct
- * values in AVStream.time_base units (and guessed if the format cannot
- * provide them). pkt->pts can be AV_NOPTS_VALUE if the video format
- * has B-frames, so it is better to rely on pkt->dts if you do not
- * decompress the payload.
- *
- * @return 0 if OK, < 0 on error or end of file. On error, pkt will be blank
- *         (as if it came from av_packet_alloc()).
- *
- * @note pkt will be initialized, so it may be uninitialized, but it must not
- *       contain data that needs to be freed.
- */
-av_read_frame_sync(s: number,pkt: number): number | Promise<number>;
-/**
- * Reduce packet size, correctly zeroing padding
- *
- * @param pkt packet
- * @param size new size
- */
-av_shrink_packet_sync(pkt: number,size: number): void;
-/**
- * Write a packet to an output media file.
- *
- * This function passes the packet directly to the muxer, without any buffering
- * or reordering. The caller is responsible for correctly interleaving the
- * packets if the format requires it. Callers that want libavformat to handle
- * the interleaving should call av_interleaved_write_frame() instead of this
- * function.
- *
- * @param s media file handle
- * @param pkt The packet containing the data to be written. Note that unlike
- *            av_interleaved_write_frame(), this function does not take
- *            ownership of the packet passed to it (though some muxers may make
- *            an internal reference to the input packet).
- *            <br>
- *            This parameter can be NULL (at any time, not just at the end), in
- *            order to immediately flush data buffered within the muxer, for
- *            muxers that buffer up data internally before writing it to the
- *            output.
- *            <br>
- *            Packet's @ref AVPacket.stream_index "stream_index" field must be
- *            set to the index of the corresponding stream in @ref
- *            AVFormatContext.streams "s->streams".
- *            <br>
- *            The timestamps (@ref AVPacket.pts "pts", @ref AVPacket.dts "dts")
- *            must be set to correct values in the stream's timebase (unless the
- *            output format is flagged with the AVFMT_NOTIMESTAMPS flag, then
- *            they can be set to AV_NOPTS_VALUE).
- *            The dts for subsequent packets passed to this function must be strictly
- *            increasing when compared in their respective timebases (unless the
- *            output format is flagged with the AVFMT_TS_NONSTRICT, then they
- *            merely have to be nondecreasing).  @ref AVPacket.duration
- *            "duration") should also be set if known.
- * @return < 0 on error, = 0 if OK, 1 if flushed and there is no more data to flush
- *
- * @see av_interleaved_write_frame()
- */
-av_write_frame_sync(s: number,pkt: number): number;
-/**
- * Write the stream trailer to an output media file and free the
- * file private data.
- *
- * May only be called after a successful call to avformat_write_header.
- *
- * @param s media file handle
- * @return 0 if OK, AVERROR_xxx on error
- */
-av_write_trailer_sync(s: number): number;
-/**
- * Copy entries from one AVDictionary struct into another.
- *
- * @note Metadata is read using the ::AV_DICT_IGNORE_SUFFIX flag
- *
- * @param dst   Pointer to a pointer to a AVDictionary struct to copy into. If *dst is NULL,
- *              this function will allocate a struct for you and put it in *dst
- * @param src   Pointer to the source AVDictionary struct to copy items from.
- * @param flags Flags to use when setting entries in *dst
- *
- * @return 0 on success, negative AVERROR code on failure. If dst was allocated
- *           by this function, callers should free the associated memory.
- */
-av_dict_copy_js_sync(dst: number,src: number,flags: number): number;
-/**
- * Free all the memory allocated for an AVDictionary struct
- * and all keys and values.
- */
-av_dict_free_sync(m: number): void;
-/**
- * Set the given entry in *pm, overwriting an existing entry.
- *
- * Note: If AV_DICT_DONT_STRDUP_KEY or AV_DICT_DONT_STRDUP_VAL is set,
- * these arguments will be freed on error.
- *
- * @warning Adding a new entry to a dictionary invalidates all existing entries
- * previously returned with av_dict_get() or av_dict_iterate().
- *
- * @param pm        Pointer to a pointer to a dictionary struct. If *pm is NULL
- *                  a dictionary struct is allocated and put in *pm.
- * @param key       Entry key to add to *pm (will either be av_strduped or added as a new key depending on flags)
- * @param value     Entry value to add to *pm (will be av_strduped or added as a new key depending on flags).
- *                  Passing a NULL value will cause an existing entry to be deleted.
- *
- * @return          >= 0 on success otherwise an error code <0
- */
-av_dict_set_js_sync(pm: number,key: string,value: string,flags: number): number;
-/**
- * Allocate and return an SwsContext. You need it to perform
- * scaling/conversion operations using sws_scale().
- *
- * @param srcW the width of the source image
- * @param srcH the height of the source image
- * @param srcFormat the source image format
- * @param dstW the width of the destination image
- * @param dstH the height of the destination image
- * @param dstFormat the destination image format
- * @param flags specify which algorithm and options to use for rescaling
- * @param param extra parameters to tune the used scaler
- *              For SWS_BICUBIC param[0] and [1] tune the shape of the basis
- *              function, param[0] tunes f(1) and param[1] f´(1)
- *              For SWS_GAUSS param[0] tunes the exponent and thus cutoff
- *              frequency
- *              For SWS_LANCZOS param[0] tunes the width of the window function
- * @return a pointer to an allocated context, or NULL in case of error
- * @note this function is to be removed after a saner alternative is
- *       written
- */
-sws_getContext_sync(srcW: number,srcH: number,srcFormat: number,dstW: number,dstH: number,dstFormat: number,flags: number,srcFilter: number,dstFilter: number,param: number): number;
-/**
- * Free the swscaler context swsContext.
- * If swsContext is NULL, then does nothing.
- */
-sws_freeContext_sync(swsContext: number): void;
-/**
- * Scale source data from src and write the output to dst.
- *
- * This is merely a convenience wrapper around
- * - sws_frame_start()
- * - sws_send_slice(0, src->height)
- * - sws_receive_slice(0, dst->height)
- * - sws_frame_end()
- *
- * @param c   The scaling context
- * @param dst The destination frame. See documentation for sws_frame_start() for
- *            more details.
- * @param src The source frame.
- *
- * @return 0 on success, a negative AVERROR code on failure
- */
-sws_scale_frame_sync(c: number,dst: number,src: number): number;
-AVPacketSideData_data_sync(a0: number,a1: number): number;
-AVPacketSideData_size_sync(a0: number,a1: number): number;
-AVPacketSideData_type_sync(a0: number,a1: number): number;
-AVPixFmtDescriptor_comp_depth_sync(a0: number,a1: number): number;
-ff_error_sync(a0: number): string;
-ff_nothing_sync(): void | Promise<void>;
-calloc_sync(a0: number,a1: number): number;
-close_sync(a0: number): number;
-dup2_sync(a0: number,a1: number): number;
-free_sync(a0: number): void;
-malloc_sync(a0: number): number;
-mallinfo_uordblks_sync(): number;
-open_sync(a0: string,a1: number,a2: number): number;
-strerror_sync(a0: number): string;
-libavjs_with_swscale_sync(): number;
-libavjs_create_main_thread_sync(): number;
-ffmpeg_main_sync(a0: number,a1: number): number | Promise<number>;
-ffprobe_main_sync(a0: number,a1: number): number | Promise<number>;
-AVFrame_channel_layout_sync(ptr: number): number;
-AVFrame_channel_layout_s_sync(ptr: number, val: number): void;
-AVFrame_channel_layouthi_sync(ptr: number): number;
-AVFrame_channel_layouthi_s_sync(ptr: number, val: number): void;
-AVFrame_channels_sync(ptr: number): number;
-AVFrame_channels_s_sync(ptr: number, val: number): void;
-AVFrame_channel_layoutmask_sync(ptr: number): number;
-AVFrame_channel_layoutmask_s_sync(ptr: number, val: number): void;
-AVFrame_ch_layout_nb_channels_sync(ptr: number): number;
-AVFrame_ch_layout_nb_channels_s_sync(ptr: number, val: number): void;
-AVFrame_crop_bottom_sync(ptr: number): number;
-AVFrame_crop_bottom_s_sync(ptr: number, val: number): void;
-AVFrame_crop_left_sync(ptr: number): number;
-AVFrame_crop_left_s_sync(ptr: number, val: number): void;
-AVFrame_crop_right_sync(ptr: number): number;
-AVFrame_crop_right_s_sync(ptr: number, val: number): void;
-AVFrame_crop_top_sync(ptr: number): number;
-AVFrame_crop_top_s_sync(ptr: number, val: number): void;
-AVFrame_data_a_sync(ptr: number, idx: number): number;
-AVFrame_data_a_s_sync(ptr: number, idx: number, val: number): void;
-AVFrame_format_sync(ptr: number): number;
-AVFrame_format_s_sync(ptr: number, val: number): void;
-AVFrame_height_sync(ptr: number): number;
-AVFrame_height_s_sync(ptr: number, val: number): void;
-AVFrame_key_frame_sync(ptr: number): number;
-AVFrame_key_frame_s_sync(ptr: number, val: number): void;
-AVFrame_linesize_a_sync(ptr: number, idx: number): number;
-AVFrame_linesize_a_s_sync(ptr: number, idx: number, val: number): void;
-AVFrame_nb_samples_sync(ptr: number): number;
-AVFrame_nb_samples_s_sync(ptr: number, val: number): void;
-AVFrame_pict_type_sync(ptr: number): number;
-AVFrame_pict_type_s_sync(ptr: number, val: number): void;
-AVFrame_pts_sync(ptr: number): number;
-AVFrame_pts_s_sync(ptr: number, val: number): void;
-AVFrame_ptshi_sync(ptr: number): number;
-AVFrame_ptshi_s_sync(ptr: number, val: number): void;
-AVFrame_sample_aspect_ratio_num_sync(ptr: number): number;
-AVFrame_sample_aspect_ratio_num_s_sync(ptr: number, val: number): void;
-AVFrame_sample_aspect_ratio_den_sync(ptr: number): number;
-AVFrame_sample_aspect_ratio_den_s_sync(ptr: number, val: number): void;
-AVFrame_sample_aspect_ratio_s_sync(ptr: number, num: number, den: number): void;
-AVFrame_sample_rate_sync(ptr: number): number;
-AVFrame_sample_rate_s_sync(ptr: number, val: number): void;
-AVFrame_time_base_num_sync(ptr: number): number;
-AVFrame_time_base_num_s_sync(ptr: number, val: number): void;
-AVFrame_time_base_den_sync(ptr: number): number;
-AVFrame_time_base_den_s_sync(ptr: number, val: number): void;
-AVFrame_time_base_s_sync(ptr: number, num: number, den: number): void;
-AVFrame_width_sync(ptr: number): number;
-AVFrame_width_s_sync(ptr: number, val: number): void;
-AVPixFmtDescriptor_flags_sync(ptr: number): number;
-AVPixFmtDescriptor_flags_s_sync(ptr: number, val: number): void;
-AVPixFmtDescriptor_log2_chroma_h_sync(ptr: number): number;
-AVPixFmtDescriptor_log2_chroma_h_s_sync(ptr: number, val: number): void;
-AVPixFmtDescriptor_log2_chroma_w_sync(ptr: number): number;
-AVPixFmtDescriptor_log2_chroma_w_s_sync(ptr: number, val: number): void;
-AVPixFmtDescriptor_nb_components_sync(ptr: number): number;
-AVPixFmtDescriptor_nb_components_s_sync(ptr: number, val: number): void;
 AVCodec_name_sync(ptr: number): string;
 AVCodec_sample_fmts_sync(ptr: number): number;
-AVCodec_sample_fmts_s_sync(ptr: number, val: number): void;
-AVCodec_sample_fmts_a_sync(ptr: number, idx: number): number;
-AVCodec_sample_fmts_a_s_sync(ptr: number, idx: number, val: number): void;
+AVCodec_sample_fmts_s_sync(ptr: number,val: number): void;
+AVCodec_sample_fmts_a_sync(ptr: number,idx: number): number;
+AVCodec_sample_fmts_a_s_sync(ptr: number,idx: number,val: number): void;
 AVCodec_supported_samplerates_sync(ptr: number): number;
-AVCodec_supported_samplerates_s_sync(ptr: number, val: number): void;
-AVCodec_supported_samplerates_a_sync(ptr: number, idx: number): number;
-AVCodec_supported_samplerates_a_s_sync(ptr: number, idx: number, val: number): void;
+AVCodec_supported_samplerates_s_sync(ptr: number,val: number): void;
+AVCodec_supported_samplerates_a_sync(ptr: number,idx: number): number;
+AVCodec_supported_samplerates_a_s_sync(ptr: number,idx: number,val: number): void;
 AVCodec_type_sync(ptr: number): number;
-AVCodec_type_s_sync(ptr: number, val: number): void;
+AVCodec_type_s_sync(ptr: number,val: number): void;
 AVCodecContext_codec_id_sync(ptr: number): number;
-AVCodecContext_codec_id_s_sync(ptr: number, val: number): void;
+AVCodecContext_codec_id_s_sync(ptr: number,val: number): void;
 AVCodecContext_codec_type_sync(ptr: number): number;
-AVCodecContext_codec_type_s_sync(ptr: number, val: number): void;
+AVCodecContext_codec_type_s_sync(ptr: number,val: number): void;
 AVCodecContext_bit_rate_sync(ptr: number): number;
-AVCodecContext_bit_rate_s_sync(ptr: number, val: number): void;
+AVCodecContext_bit_rate_s_sync(ptr: number,val: number): void;
 AVCodecContext_bit_ratehi_sync(ptr: number): number;
-AVCodecContext_bit_ratehi_s_sync(ptr: number, val: number): void;
+AVCodecContext_bit_ratehi_s_sync(ptr: number,val: number): void;
 AVCodecContext_channel_layout_sync(ptr: number): number;
-AVCodecContext_channel_layout_s_sync(ptr: number, val: number): void;
+AVCodecContext_channel_layout_s_sync(ptr: number,val: number): void;
 AVCodecContext_channel_layouthi_sync(ptr: number): number;
-AVCodecContext_channel_layouthi_s_sync(ptr: number, val: number): void;
+AVCodecContext_channel_layouthi_s_sync(ptr: number,val: number): void;
 AVCodecContext_channels_sync(ptr: number): number;
-AVCodecContext_channels_s_sync(ptr: number, val: number): void;
+AVCodecContext_channels_s_sync(ptr: number,val: number): void;
 AVCodecContext_channel_layoutmask_sync(ptr: number): number;
-AVCodecContext_channel_layoutmask_s_sync(ptr: number, val: number): void;
+AVCodecContext_channel_layoutmask_s_sync(ptr: number,val: number): void;
 AVCodecContext_ch_layout_nb_channels_sync(ptr: number): number;
-AVCodecContext_ch_layout_nb_channels_s_sync(ptr: number, val: number): void;
+AVCodecContext_ch_layout_nb_channels_s_sync(ptr: number,val: number): void;
+AVCodecContext_coded_side_data_sync(ptr: number): number;
+AVCodecContext_coded_side_data_s_sync(ptr: number,val: number): void;
+AVCodecContext_compression_level_sync(ptr: number): number;
+AVCodecContext_compression_level_s_sync(ptr: number,val: number): void;
 AVCodecContext_extradata_sync(ptr: number): number;
-AVCodecContext_extradata_s_sync(ptr: number, val: number): void;
+AVCodecContext_extradata_s_sync(ptr: number,val: number): void;
 AVCodecContext_extradata_size_sync(ptr: number): number;
-AVCodecContext_extradata_size_s_sync(ptr: number, val: number): void;
+AVCodecContext_extradata_size_s_sync(ptr: number,val: number): void;
 AVCodecContext_frame_size_sync(ptr: number): number;
-AVCodecContext_frame_size_s_sync(ptr: number, val: number): void;
+AVCodecContext_frame_size_s_sync(ptr: number,val: number): void;
 AVCodecContext_framerate_num_sync(ptr: number): number;
-AVCodecContext_framerate_num_s_sync(ptr: number, val: number): void;
 AVCodecContext_framerate_den_sync(ptr: number): number;
-AVCodecContext_framerate_den_s_sync(ptr: number, val: number): void;
-AVCodecContext_framerate_s_sync(ptr: number, num: number, den: number): void;
+AVCodecContext_framerate_num_s_sync(ptr: number,val: number): number;
+AVCodecContext_framerate_den_s_sync(ptr: number,val: number): number;
+AVCodecContext_framerate_s_sync(ptr: number,num: number,den: number): number;
 AVCodecContext_gop_size_sync(ptr: number): number;
-AVCodecContext_gop_size_s_sync(ptr: number, val: number): void;
+AVCodecContext_gop_size_s_sync(ptr: number,val: number): void;
 AVCodecContext_height_sync(ptr: number): number;
-AVCodecContext_height_s_sync(ptr: number, val: number): void;
+AVCodecContext_height_s_sync(ptr: number,val: number): void;
 AVCodecContext_keyint_min_sync(ptr: number): number;
-AVCodecContext_keyint_min_s_sync(ptr: number, val: number): void;
+AVCodecContext_keyint_min_s_sync(ptr: number,val: number): void;
 AVCodecContext_level_sync(ptr: number): number;
-AVCodecContext_level_s_sync(ptr: number, val: number): void;
+AVCodecContext_level_s_sync(ptr: number,val: number): void;
 AVCodecContext_max_b_frames_sync(ptr: number): number;
-AVCodecContext_max_b_frames_s_sync(ptr: number, val: number): void;
+AVCodecContext_max_b_frames_s_sync(ptr: number,val: number): void;
+AVCodecContext_nb_coded_side_data_sync(ptr: number): number;
+AVCodecContext_nb_coded_side_data_s_sync(ptr: number,val: number): void;
 AVCodecContext_pix_fmt_sync(ptr: number): number;
-AVCodecContext_pix_fmt_s_sync(ptr: number, val: number): void;
+AVCodecContext_pix_fmt_s_sync(ptr: number,val: number): void;
 AVCodecContext_profile_sync(ptr: number): number;
-AVCodecContext_profile_s_sync(ptr: number, val: number): void;
+AVCodecContext_profile_s_sync(ptr: number,val: number): void;
 AVCodecContext_rc_max_rate_sync(ptr: number): number;
-AVCodecContext_rc_max_rate_s_sync(ptr: number, val: number): void;
+AVCodecContext_rc_max_rate_s_sync(ptr: number,val: number): void;
 AVCodecContext_rc_max_ratehi_sync(ptr: number): number;
-AVCodecContext_rc_max_ratehi_s_sync(ptr: number, val: number): void;
+AVCodecContext_rc_max_ratehi_s_sync(ptr: number,val: number): void;
 AVCodecContext_rc_min_rate_sync(ptr: number): number;
-AVCodecContext_rc_min_rate_s_sync(ptr: number, val: number): void;
+AVCodecContext_rc_min_rate_s_sync(ptr: number,val: number): void;
 AVCodecContext_rc_min_ratehi_sync(ptr: number): number;
-AVCodecContext_rc_min_ratehi_s_sync(ptr: number, val: number): void;
+AVCodecContext_rc_min_ratehi_s_sync(ptr: number,val: number): void;
 AVCodecContext_sample_aspect_ratio_num_sync(ptr: number): number;
-AVCodecContext_sample_aspect_ratio_num_s_sync(ptr: number, val: number): void;
 AVCodecContext_sample_aspect_ratio_den_sync(ptr: number): number;
-AVCodecContext_sample_aspect_ratio_den_s_sync(ptr: number, val: number): void;
-AVCodecContext_sample_aspect_ratio_s_sync(ptr: number, num: number, den: number): void;
+AVCodecContext_sample_aspect_ratio_num_s_sync(ptr: number,val: number): number;
+AVCodecContext_sample_aspect_ratio_den_s_sync(ptr: number,val: number): number;
+AVCodecContext_sample_aspect_ratio_s_sync(ptr: number,num: number,den: number): number;
 AVCodecContext_sample_fmt_sync(ptr: number): number;
-AVCodecContext_sample_fmt_s_sync(ptr: number, val: number): void;
+AVCodecContext_sample_fmt_s_sync(ptr: number,val: number): void;
 AVCodecContext_sample_rate_sync(ptr: number): number;
-AVCodecContext_sample_rate_s_sync(ptr: number, val: number): void;
+AVCodecContext_sample_rate_s_sync(ptr: number,val: number): void;
+AVCodecContext_strict_std_compliance_sync(ptr: number): number;
+AVCodecContext_strict_std_compliance_s_sync(ptr: number,val: number): void;
 AVCodecContext_time_base_num_sync(ptr: number): number;
-AVCodecContext_time_base_num_s_sync(ptr: number, val: number): void;
 AVCodecContext_time_base_den_sync(ptr: number): number;
-AVCodecContext_time_base_den_s_sync(ptr: number, val: number): void;
-AVCodecContext_time_base_s_sync(ptr: number, num: number, den: number): void;
+AVCodecContext_time_base_num_s_sync(ptr: number,val: number): number;
+AVCodecContext_time_base_den_s_sync(ptr: number,val: number): number;
+AVCodecContext_time_base_s_sync(ptr: number,num: number,den: number): number;
+AVCodecContext_pkt_timebase_num_sync(ptr: number): number;
+AVCodecContext_pkt_timebase_den_sync(ptr: number): number;
+AVCodecContext_pkt_timebase_num_s_sync(ptr: number,val: number): number;
+AVCodecContext_pkt_timebase_den_s_sync(ptr: number,val: number): number;
+AVCodecContext_pkt_timebase_s_sync(ptr: number,num: number,den: number): number;
 AVCodecContext_qmax_sync(ptr: number): number;
-AVCodecContext_qmax_s_sync(ptr: number, val: number): void;
+AVCodecContext_qmax_s_sync(ptr: number,val: number): void;
 AVCodecContext_qmin_sync(ptr: number): number;
-AVCodecContext_qmin_s_sync(ptr: number, val: number): void;
+AVCodecContext_qmin_s_sync(ptr: number,val: number): void;
 AVCodecContext_width_sync(ptr: number): number;
-AVCodecContext_width_s_sync(ptr: number, val: number): void;
-AVCodecDescriptor_id_sync(ptr: number): number;
-AVCodecDescriptor_id_s_sync(ptr: number, val: number): void;
-AVCodecDescriptor_long_name_sync(ptr: number): number;
-AVCodecDescriptor_long_name_s_sync(ptr: number, val: number): void;
-AVCodecDescriptor_mime_types_a_sync(ptr: number, idx: number): number;
-AVCodecDescriptor_mime_types_a_s_sync(ptr: number, idx: number, val: number): void;
-AVCodecDescriptor_name_sync(ptr: number): number;
-AVCodecDescriptor_name_s_sync(ptr: number, val: number): void;
-AVCodecDescriptor_props_sync(ptr: number): number;
-AVCodecDescriptor_props_s_sync(ptr: number, val: number): void;
-AVCodecDescriptor_type_sync(ptr: number): number;
-AVCodecDescriptor_type_s_sync(ptr: number, val: number): void;
-AVCodecParameters_bit_rate_sync(ptr: number): number;
-AVCodecParameters_bit_rate_s_sync(ptr: number, val: number): void;
-AVCodecParameters_channel_layoutmask_sync(ptr: number): number;
-AVCodecParameters_channel_layoutmask_s_sync(ptr: number, val: number): void;
-AVCodecParameters_channels_sync(ptr: number): number;
-AVCodecParameters_channels_s_sync(ptr: number, val: number): void;
-AVCodecParameters_ch_layout_nb_channels_sync(ptr: number): number;
-AVCodecParameters_ch_layout_nb_channels_s_sync(ptr: number, val: number): void;
-AVCodecParameters_chroma_location_sync(ptr: number): number;
-AVCodecParameters_chroma_location_s_sync(ptr: number, val: number): void;
-AVCodecParameters_codec_id_sync(ptr: number): number;
-AVCodecParameters_codec_id_s_sync(ptr: number, val: number): void;
-AVCodecParameters_codec_tag_sync(ptr: number): number;
-AVCodecParameters_codec_tag_s_sync(ptr: number, val: number): void;
-AVCodecParameters_codec_type_sync(ptr: number): number;
-AVCodecParameters_codec_type_s_sync(ptr: number, val: number): void;
-AVCodecParameters_color_primaries_sync(ptr: number): number;
-AVCodecParameters_color_primaries_s_sync(ptr: number, val: number): void;
-AVCodecParameters_color_range_sync(ptr: number): number;
-AVCodecParameters_color_range_s_sync(ptr: number, val: number): void;
-AVCodecParameters_color_space_sync(ptr: number): number;
-AVCodecParameters_color_space_s_sync(ptr: number, val: number): void;
-AVCodecParameters_color_trc_sync(ptr: number): number;
-AVCodecParameters_color_trc_s_sync(ptr: number, val: number): void;
-AVCodecParameters_extradata_sync(ptr: number): number;
-AVCodecParameters_extradata_s_sync(ptr: number, val: number): void;
-AVCodecParameters_extradata_size_sync(ptr: number): number;
-AVCodecParameters_extradata_size_s_sync(ptr: number, val: number): void;
-AVCodecParameters_format_sync(ptr: number): number;
-AVCodecParameters_format_s_sync(ptr: number, val: number): void;
-AVCodecParameters_framerate_num_sync(ptr: number): number;
-AVCodecParameters_framerate_num_s_sync(ptr: number, val: number): void;
-AVCodecParameters_framerate_den_sync(ptr: number): number;
-AVCodecParameters_framerate_den_s_sync(ptr: number, val: number): void;
-AVCodecParameters_framerate_s_sync(ptr: number, num: number, den: number): void;
-AVCodecParameters_height_sync(ptr: number): number;
-AVCodecParameters_height_s_sync(ptr: number, val: number): void;
-AVCodecParameters_level_sync(ptr: number): number;
-AVCodecParameters_level_s_sync(ptr: number, val: number): void;
-AVCodecParameters_profile_sync(ptr: number): number;
-AVCodecParameters_profile_s_sync(ptr: number, val: number): void;
-AVCodecParameters_sample_rate_sync(ptr: number): number;
-AVCodecParameters_sample_rate_s_sync(ptr: number, val: number): void;
-AVCodecParameters_width_sync(ptr: number): number;
-AVCodecParameters_width_s_sync(ptr: number, val: number): void;
-AVPacket_data_sync(ptr: number): number;
-AVPacket_data_s_sync(ptr: number, val: number): void;
-AVPacket_dts_sync(ptr: number): number;
-AVPacket_dts_s_sync(ptr: number, val: number): void;
-AVPacket_dtshi_sync(ptr: number): number;
-AVPacket_dtshi_s_sync(ptr: number, val: number): void;
-AVPacket_duration_sync(ptr: number): number;
-AVPacket_duration_s_sync(ptr: number, val: number): void;
-AVPacket_durationhi_sync(ptr: number): number;
-AVPacket_durationhi_s_sync(ptr: number, val: number): void;
-AVPacket_flags_sync(ptr: number): number;
-AVPacket_flags_s_sync(ptr: number, val: number): void;
-AVPacket_pos_sync(ptr: number): number;
-AVPacket_pos_s_sync(ptr: number, val: number): void;
-AVPacket_poshi_sync(ptr: number): number;
-AVPacket_poshi_s_sync(ptr: number, val: number): void;
-AVPacket_pts_sync(ptr: number): number;
-AVPacket_pts_s_sync(ptr: number, val: number): void;
-AVPacket_ptshi_sync(ptr: number): number;
-AVPacket_ptshi_s_sync(ptr: number, val: number): void;
-AVPacket_side_data_sync(ptr: number): number;
-AVPacket_side_data_s_sync(ptr: number, val: number): void;
-AVPacket_side_data_elems_sync(ptr: number): number;
-AVPacket_side_data_elems_s_sync(ptr: number, val: number): void;
-AVPacket_size_sync(ptr: number): number;
-AVPacket_size_s_sync(ptr: number, val: number): void;
-AVPacket_stream_index_sync(ptr: number): number;
-AVPacket_stream_index_s_sync(ptr: number, val: number): void;
-AVPacket_time_base_num_sync(ptr: number): number;
-AVPacket_time_base_num_s_sync(ptr: number, val: number): void;
-AVPacket_time_base_den_sync(ptr: number): number;
-AVPacket_time_base_den_s_sync(ptr: number, val: number): void;
-AVPacket_time_base_s_sync(ptr: number, num: number, den: number): void;
-AVFormatContext_duration_sync(ptr: number): number;
-AVFormatContext_duration_s_sync(ptr: number, val: number): void;
-AVFormatContext_durationhi_sync(ptr: number): number;
-AVFormatContext_durationhi_s_sync(ptr: number, val: number): void;
-AVFormatContext_flags_sync(ptr: number): number;
-AVFormatContext_flags_s_sync(ptr: number, val: number): void;
-AVFormatContext_nb_streams_sync(ptr: number): number;
-AVFormatContext_nb_streams_s_sync(ptr: number, val: number): void;
-AVFormatContext_oformat_sync(ptr: number): number;
-AVFormatContext_oformat_s_sync(ptr: number, val: number): void;
-AVFormatContext_pb_sync(ptr: number): number;
-AVFormatContext_pb_s_sync(ptr: number, val: number): void;
-AVFormatContext_start_time_sync(ptr: number): number;
-AVFormatContext_start_time_s_sync(ptr: number, val: number): void;
-AVFormatContext_start_timehi_sync(ptr: number): number;
-AVFormatContext_start_timehi_s_sync(ptr: number, val: number): void;
-AVFormatContext_streams_a_sync(ptr: number, idx: number): number;
-AVFormatContext_streams_a_s_sync(ptr: number, idx: number, val: number): void;
-AVStream_codecpar_sync(ptr: number): number;
-AVStream_codecpar_s_sync(ptr: number, val: number): void;
-AVStream_discard_sync(ptr: number): number;
-AVStream_discard_s_sync(ptr: number, val: number): void;
-AVStream_duration_sync(ptr: number): number;
-AVStream_duration_s_sync(ptr: number, val: number): void;
-AVStream_durationhi_sync(ptr: number): number;
-AVStream_durationhi_s_sync(ptr: number, val: number): void;
-AVStream_time_base_num_sync(ptr: number): number;
-AVStream_time_base_num_s_sync(ptr: number, val: number): void;
-AVStream_time_base_den_sync(ptr: number): number;
-AVStream_time_base_den_s_sync(ptr: number, val: number): void;
-AVStream_time_base_s_sync(ptr: number, num: number, den: number): void;
-AVFilterInOut_filter_ctx_sync(ptr: number): number;
-AVFilterInOut_filter_ctx_s_sync(ptr: number, val: number): void;
-AVFilterInOut_name_sync(ptr: number): number;
-AVFilterInOut_name_s_sync(ptr: number, val: number): void;
-AVFilterInOut_next_sync(ptr: number): number;
-AVFilterInOut_next_s_sync(ptr: number, val: number): void;
-AVFilterInOut_pad_idx_sync(ptr: number): number;
-AVFilterInOut_pad_idx_s_sync(ptr: number, val: number): void;
-av_frame_free_js_sync(ptr: number): void;
-av_packet_free_js_sync(ptr: number): void;
-avformat_close_input_js_sync(ptr: number): void;
+AVCodecContext_width_s_sync(ptr: number,val: number): void;
 avcodec_free_context_js_sync(ptr: number): void;
-avcodec_parameters_free_js_sync(ptr: number): void;
-avfilter_graph_free_js_sync(ptr: number): void;
-avfilter_inout_free_js_sync(ptr: number): void;
-av_dict_free_js_sync(ptr: number): void;
-copyin_u8_sync(ptr: number, arr: Uint8Array): void;
-copyout_u8_sync(ptr: number, len: number): Uint8Array;
-copyin_s16_sync(ptr: number, arr: Int16Array): void;
-copyout_s16_sync(ptr: number, len: number): Int16Array;
-copyin_s32_sync(ptr: number, arr: Int32Array): void;
-copyout_s32_sync(ptr: number, len: number): Int32Array;
-copyin_f32_sync(ptr: number, arr: Float32Array): void;
-copyout_f32_sync(ptr: number, len: number): Float32Array;
-
-    /**
- * Read a complete file from the in-memory filesystem.
- * @param name  Filename to read
- */
-readFile_sync(name: string): Uint8Array;
-/**
- * Write a complete file to the in-memory filesystem.
- * @param name  Filename to write
- * @param content  Content to write to the file
- */
-writeFile_sync(name: string, content: Uint8Array): Uint8Array;
-/**
- * Delete a file in the in-memory filesystem.
- * @param name  Filename to delete
- */
-unlink_sync(name: string): void;
-/**
- * Unmount a mounted filesystem.
- * @param mountpoint  Path where the filesystem is mounted
- */
-unmount_sync(mountpoint: string): void;
-/**
- * Make a lazy file. Direct link to createLazyFile.
- */
-createLazyFile_sync(
-    parent: string, name: string, url: string, canRead: boolean,
-    canWrite: boolean
-): void;
-/**
- * Make a reader device.
- * @param name  Filename to create.
- * @param mode  Unix permissions (pointless since this is an in-memory
- *              filesystem)
- */
-mkreaderdev_sync(name: string, mode?: number): void;
-/**
- * Make a block reader "device". Technically a file that we then hijack to have
- * our behavior.
- * @param name  Filename to create.
- * @param size  Size of the device to present.
- */
-mkblockreaderdev_sync(name: string, size: number): void;
-/**
- * Make a readahead device. This reads a File (or other Blob) and attempts to
- * read ahead of whatever libav actually asked for. Note that this overrides
- * onblockread, so if you want to support both kinds of files, make sure you set
- * onblockread before calling this.
- * @param name  Filename to create.
- * @param file  Blob or file to read.
- */
-mkreadaheadfile_sync(name: string, file: Blob): void;
-/**
- * Unlink a readahead file. Also gets rid of the File reference.
- * @param name  Filename to unlink.
- */
-unlinkreadaheadfile_sync(name: string): void;
-/**
- * Make a writer device.
- * @param name  Filename to create
- * @param mode  Unix permissions
- */
-mkwriterdev_sync(name: string, mode?: number): void;
-/**
- * Make a stream writer device. The same as a writer device but does not allow
- * seeking.
- * @param name  Filename to create
- * @param mode  Unix permissions
- */
-mkstreamwriterdev_sync(name: string, mode?: number): void;
-/**
- * Mount a writer *filesystem*. All files created in this filesystem will be
- * redirected as writers. The directory will be created for you if it doesn't
- * already exist, but it may already exist.
- * @param mountpoint  Directory to mount as a writer filesystem
- */
-mountwriterfs_sync(mountpoint: string): void;
-/**
- * Make a workerfs file. Returns the filename that it's mounted to.
- * @param name  Filename to use.
- * @param blob  Blob to load at that file.
- */
-mkworkerfsfile_sync(name: string, blob: Blob): string;
-/**
- * Unmount (unmake) a workerfs file. Give the *original name you provided*, not
- * the name mkworkerfsfile returned.
- * @param name  Filename to unmount.
- */
-unlinkworkerfsfile_sync(name: string): void;
-/**
- * Make a FileSystemFileHandle device. This writes via a FileSystemFileHandle,
- * synchronously if possible. Note that this overrides onwrite, so if you want
- * to support both kinds of files, make sure you set onwrite before calling
- * this.
- * @param name  Filename to create.
- * @param fsfh  FileSystemFileHandle corresponding to this filename.
- */
-mkfsfhfile(name: string, fsfh: FileSystemFileHandle): Promise<void>;
-/**
- * Unlink a FileSystemFileHandle file. Also closes the file handle.
- * @param name  Filename to unlink.
- */
-unlinkfsfhfile(name: string): Promise<void>;
-/**
- * Send some data to a reader device. To indicate EOF, send null. To indicate an
- * error, send EOF and include an error code in the options.
- * @param name  Filename of the reader device.
- * @param data  Data to send.
- * @param opts  Optional send options, such as an error code.
- */
-ff_reader_dev_send_sync(
-    name: string, data: Uint8Array | null,
-    opts?: {
-        errorCode?: number,
-        error?: any // any other error, used internally
-    }
-): void;
-/**
- * Send some data to a block reader device. To indicate EOF, send null (but note
- * that block read devices have a fixed size, and will automatically send EOF
- * for reads outside of that size, so you should not normally need to send EOF).
- * To indicate an error, send EOF and include an error code in the options.
- * @param name  Filename of the reader device.
- * @param pos  Position of the data in the file.
- * @param data  Data to send.
- * @param opts  Optional send options, such as an error code.
- */
-ff_block_reader_dev_send_sync(
-    name: string, pos: number, data: Uint8Array | null,
-    opts?: {
-        errorCode?: number,
-        error?: any // any other error, used internally
-    }
-): void;
-/**
- * @deprecated
- * DEPRECATED. Use the onread callback.
- * Metafunction to determine whether any device has any waiters. This can be
- * used to determine whether more data needs to be sent before a previous step
- * will be fully resolved.
- * @param name  Optional name of file to check for waiters
- */
-ff_reader_dev_waiting_sync(name?: string): boolean;
 /**
  * Metafunction to initialize an encoder with all the bells and whistles.
  * Returns [AVCodec, AVCodecContext, AVFrame, AVPacket, frame_size]
@@ -4455,101 +4806,146 @@ ff_decode_multi_sync(
     }
 ): ImageData[];
 /**
- * Initialize a muxer format, format context and some number of streams.
- * Returns [AVFormatContext, AVOutputFormat, AVIOContext, AVStream[]]
- * @param opts  Muxer options
- * @param stramCtxs  Context info for each stream to mux
+ * Get a frame with filtered data from sink and put it in frame.
+ *
+ * @param ctx pointer to a context of a buffersink or abuffersink AVFilter.
+ * @param frame pointer to an allocated frame that will be filled with data.
+ *              The data must be freed using av_frame_unref() / av_frame_free()
+ *
+ * @return
+ *         - >= 0 if a frame was successfully returned.
+ *         - AVERROR(EAGAIN) if no frames are available at this point; more
+ *           input frames must be added to the filtergraph to get more output.
+ *         - AVERROR_EOF if there will be no more output frames on this sink.
+ *         - A different negative AVERROR code in other failure cases.
  */
-ff_init_muxer_sync(
-    opts: {
-        oformat?: number, // format pointer
-        format_name?: string, // libav name
-        filename?: string,
-        device?: boolean, // Create a writer device
-        open?: boolean, // Open the file for writing
-        codecpars?: boolean // Streams is in terms of codecpars, not codecctx
-    },
-    streamCtxs: [number, number, number][] // AVCodecContext | AVCodecParameters, time_base_num, time_base_den
-): [number, number, number, number[]];
+av_buffersink_get_frame_sync(ctx: number,frame: number): number;
+av_buffersink_get_time_base_num_sync(a0: number): number;
+av_buffersink_get_time_base_den_sync(a0: number): number;
 /**
- * Free up a muxer format and/or file
- * @param oc  AVFormatContext
- * @param pb  AVIOContext
+ * Set the frame size for an audio buffer sink.
+ *
+ * All calls to av_buffersink_get_buffer_ref will return a buffer with
+ * exactly the specified number of samples, or AVERROR(EAGAIN) if there is
+ * not enough. The last buffer at EOF will be padded with 0.
  */
-ff_free_muxer_sync(oc: number, pb: number): void;
+av_buffersink_set_frame_size_sync(ctx: number,frame_size: number): void;
+ff_buffersink_set_ch_layout_sync(a0: number,a1: number,a2: number): number;
 /**
- * Initialize a demuxer from a file and format context, and get the list of
- * codecs/types.
- * Returns [AVFormatContext, Stream[]]
- * @param filename  Filename to open
- * @param fmt  Format to use (optional)
+ * Add a frame to the buffer source.
+ *
+ * By default, if the frame is reference-counted, this function will take
+ * ownership of the reference(s) and reset the frame. This can be controlled
+ * using the flags.
+ *
+ * If this function returns an error, the input frame is not touched.
+ *
+ * @param buffer_src  pointer to a buffer source context
+ * @param frame       a frame, or NULL to mark EOF
+ * @param flags       a combination of AV_BUFFERSRC_FLAG_*
+ * @return            >= 0 in case of success, a negative AVERROR code
+ *                    in case of failure
  */
-ff_init_demuxer_file_sync(
-    filename: string, fmt?: string
-): [number, Stream[]] | Promise<[number, Stream[]]>;
+av_buffersrc_add_frame_flags_sync(buffer_src: number,frame: number,flags: number): number;
 /**
- * Write some number of packets at once.
- * @param oc  AVFormatContext
- * @param pkt  AVPacket
- * @param inPackets  Packets to write
- * @param interleave  Set to false to *not* use the interleaved writer.
- *                    Interleaving is the default.
+ * Free a filter context. This will also remove the filter from its
+ * filtergraph's list of filters.
+ *
+ * @param filter the filter to free
  */
-ff_write_multi_sync(
-    oc: number, pkt: number, inPackets: (Packet | number)[], interleave?: boolean
-): void;
+avfilter_free_sync(filter: number): void;
 /**
- * Read many packets at once. If you don't set any limits, this function will
- * block (asynchronously) until the whole file is read, so make sure you set
- * some limits if you want to read a bit at a time. Returns a pair [result,
- * packets], where the result indicates whether an error was encountered, an
- * EOF, or simply limits (EAGAIN), and packets is a dictionary indexed by the
- * stream number in which each element is an array of packets from that stream.
- * @param fmt_ctx  AVFormatContext
- * @param pkt  AVPacket
- * @param opts  Other options
+ * Get a filter definition matching the given name.
+ *
+ * @param name the filter name to find
+ * @return     the filter definition, if any matching one is registered.
+ *             NULL if none found.
  */
-ff_read_frame_multi_sync(
-    fmt_ctx: number, pkt: number, opts?: {
-        limit?: number, // OUTPUT limit, in bytes
-        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
-        copyoutPacket?: "default" // Version of ff_copyout_packet to use
-    }
-): [number, Record<number, Packet[]>] | Promise<[number, Record<number, Packet[]>]>
-ff_read_frame_multi_sync(
-    fmt_ctx: number, pkt: number, opts: {
-        limit?: number, // OUTPUT limit, in bytes
-        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
-        copyoutPacket: "ptr" // Version of ff_copyout_packet to use
-    }
-): [number, Record<number, number[]>] | Promise<[number, Record<number, number[]>]>;
+avfilter_get_by_name_sync(name: string): number;
 /**
- * @deprecated
- * DEPRECATED. Use `ff_read_frame_multi`.
- * Read many packets at once. This older API is now deprecated. The devfile
- * parameter is unused and unsupported. Dev files should be used via the normal
- * `ff_reader_dev_waiting` API, rather than counting on device file limits, as
- * this function used to.
- * @param fmt_ctx  AVFormatContext
- * @param pkt  AVPacket
- * @param devfile  Unused
- * @param opts  Other options
+ * Allocate a filter graph.
+ *
+ * @return the allocated filter graph on success or NULL.
  */
-ff_read_multi_sync(
-    fmt_ctx: number, pkt: number, devfile?: string | null, opts?: {
-        limit?: number, // OUTPUT limit, in bytes
-        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
-        copyoutPacket?: "default" // Version of ff_copyout_packet to use
-    }
-): [number, Record<number, Packet[]>] | Promise<[number, Record<number, Packet[]>]>
-ff_read_multi_sync(
-    fmt_ctx: number, pkt: number, devfile: string | null, opts: {
-        limit?: number, // OUTPUT limit, in bytes
-        devLimit?: number, // INPUT limit, in bytes (don't read if less than this much data is available)
-        unify?: boolean, // If true, unify the packets into a single stream (called 0), so that the output is in the same order as the input
-        copyoutPacket: "ptr" // Version of ff_copyout_packet to use
-    }
-): [number, Record<number, number[]>] | Promise<[number, Record<number, number[]>]>;
+avfilter_graph_alloc_sync(): number;
+/**
+ * Check validity and configure all the links and formats in the graph.
+ *
+ * @param graphctx the filter graph
+ * @param log_ctx context used for logging
+ * @return >= 0 in case of success, a negative AVERROR code otherwise
+ */
+avfilter_graph_config_sync(graphctx: number,log_ctx: number): number;
+/**
+ * Create and add a filter instance into an existing graph.
+ * The filter instance is created from the filter filt and inited
+ * with the parameter args. opaque is currently ignored.
+ *
+ * In case of success put in *filt_ctx the pointer to the created
+ * filter instance, otherwise set *filt_ctx to NULL.
+ *
+ * @param name the instance name to give to the created filter instance
+ * @param graph_ctx the filter graph
+ * @return a negative AVERROR error code in case of failure, a non
+ * negative value otherwise
+ */
+avfilter_graph_create_filter_js_sync(filt_ctx: number,filt: string,name: string,args: number,opaque: number): number;
+/**
+ * Free a graph, destroy its links, and set *graph to NULL.
+ * If *graph is NULL, do nothing.
+ */
+avfilter_graph_free_sync(graph: number): void;
+/**
+ * Add a graph described by a string to a graph.
+ *
+ * @note The caller must provide the lists of inputs and outputs,
+ * which therefore must be known before calling the function.
+ *
+ * @note The inputs parameter describes inputs of the already existing
+ * part of the graph; i.e. from the point of view of the newly created
+ * part, they are outputs. Similarly the outputs parameter describes
+ * outputs of the already existing filters, which are provided as
+ * inputs to the parsed filters.
+ *
+ * @param graph   the filter graph where to link the parsed graph context
+ * @param filters string to be parsed
+ * @param inputs  linked list to the inputs of the graph
+ * @param outputs linked list to the outputs of the graph
+ * @return zero on success, a negative AVERROR code on error
+ */
+avfilter_graph_parse_sync(graph: number,filters: string,inputs: number,outputs: number,log_ctx: number): number;
+/**
+ * Allocate a single AVFilterInOut entry.
+ * Must be freed with avfilter_inout_free().
+ * @return allocated AVFilterInOut on success, NULL on failure.
+ */
+avfilter_inout_alloc_sync(): number;
+/**
+ * Free the supplied list of AVFilterInOut and set *inout to NULL.
+ * If *inout is NULL, do nothing.
+ */
+avfilter_inout_free_sync(inout: number): void;
+/**
+ * Link two filters together.
+ *
+ * @param src    the source filter
+ * @param srcpad index of the output pad on the source filter
+ * @param dst    the destination filter
+ * @param dstpad index of the input pad on the destination filter
+ * @return       zero on success
+ */
+avfilter_link_sync(src: number,srcpad: number,dst: number,dstpad: number): number;
+LIBAVFILTER_VERSION_INT_sync(): number;
+AVFilterInOut_filter_ctx_sync(ptr: number): number;
+AVFilterInOut_filter_ctx_s_sync(ptr: number,val: number): void;
+AVFilterInOut_name_sync(ptr: number): number;
+AVFilterInOut_name_s_sync(ptr: number,val: number): void;
+AVFilterInOut_next_sync(ptr: number): number;
+AVFilterInOut_next_s_sync(ptr: number,val: number): void;
+AVFilterInOut_pad_idx_sync(ptr: number): number;
+AVFilterInOut_pad_idx_s_sync(ptr: number,val: number): void;
+avfilter_graph_free_js_sync(ptr: number): void;
+avfilter_inout_free_js_sync(ptr: number): void;
 /**
  * Initialize a filter graph. No equivalent free since you just need to free
  * the graph itself (av_filter_graph_free) and everything under it will be
@@ -4584,6 +4980,10 @@ ff_init_filter_graph_sync(
 ): [number, number[], number[]];
 /**
  * Filter some number of frames, possibly corresponding to multiple sources.
+ * Only one sink is allowed, but config is per source. Set
+ * `config.ignoreSinkTimebase` to leave frames' timebase as it was, rather than
+ * imposing the timebase of the buffer sink. Set `config.copyoutFrame` to use a
+ * different copier than the default.
  * @param srcs  AVFilterContext(s), input
  * @param buffersink_ctx  AVFilterContext, output
  * @param framePtr  AVFrame
@@ -4595,6 +4995,7 @@ ff_filter_multi_sync(
     srcs: number, buffersink_ctx: number, framePtr: number,
     inFrames: (Frame | number)[], config?: boolean | {
         fin?: boolean,
+        ignoreSinkTimebase?: boolean,
         copyoutFrame?: "default" | "video" | "video_packed"
     }
 ): Frame[];
@@ -4602,6 +5003,7 @@ ff_filter_multi_sync(
     srcs: number[], buffersink_ctx: number, framePtr: number,
     inFrames: (Frame | number)[][], config?: boolean[] | {
         fin?: boolean,
+        ignoreSinkTimebase?: boolean,
         copyoutFrame?: "default" | "video" | "video_packed"
     }[]
 ): Frame[]
@@ -4609,6 +5011,7 @@ ff_filter_multi_sync(
     srcs: number, buffersink_ctx: number, framePtr: number,
     inFrames: (Frame | number)[], config: {
         fin?: boolean,
+        ignoreSinkTimebase?: boolean,
         copyoutFrame: "ptr"
     }
 ): number[];
@@ -4616,6 +5019,7 @@ ff_filter_multi_sync(
     srcs: number[], buffersink_ctx: number, framePtr: number,
     inFrames: (Frame | number)[][], config: {
         fin?: boolean,
+        ignoreSinkTimebase?: boolean,
         copyoutFrame: "ptr"
     }[]
 ): number[]
@@ -4623,6 +5027,7 @@ ff_filter_multi_sync(
     srcs: number, buffersink_ctx: number, framePtr: number,
     inFrames: (Frame | number)[], config: {
         fin?: boolean,
+        ignoreSinkTimebase?: boolean,
         copyoutFrame: "ImageData"
     }
 ): ImageData[];
@@ -4630,6 +5035,7 @@ ff_filter_multi_sync(
     srcs: number[], buffersink_ctx: number, framePtr: number,
     inFrames: (Frame | number)[][], config: {
         fin?: boolean,
+        ignoreSinkTimebase?: boolean,
         copyoutFrame: "ImageData"
     }[]
 ): ImageData[];
@@ -4673,89 +5079,51 @@ ff_decode_filter_multi_sync(
     }
 ): ImageData[];
 /**
- * Copy out a frame.
- * @param frame  AVFrame
+ * Allocate and return an SwsContext. You need it to perform
+ * scaling/conversion operations using sws_scale().
+ *
+ * @param srcW the width of the source image
+ * @param srcH the height of the source image
+ * @param srcFormat the source image format
+ * @param dstW the width of the destination image
+ * @param dstH the height of the destination image
+ * @param dstFormat the destination image format
+ * @param flags specify which algorithm and options to use for rescaling
+ * @param param extra parameters to tune the used scaler
+ *              For SWS_BICUBIC param[0] and [1] tune the shape of the basis
+ *              function, param[0] tunes f(1) and param[1] f´(1)
+ *              For SWS_GAUSS param[0] tunes the exponent and thus cutoff
+ *              frequency
+ *              For SWS_LANCZOS param[0] tunes the width of the window function
+ * @return a pointer to an allocated context, or NULL in case of error
+ * @note this function is to be removed after a saner alternative is
+ *       written
  */
-ff_copyout_frame_sync(frame: number): Frame;
+sws_getContext_sync(srcW: number,srcH: number,srcFormat: number,dstW: number,dstH: number,dstFormat: number,flags: number,srcFilter: number,dstFilter: number,param: number): number;
 /**
- * Copy out a video frame. `ff_copyout_frame` will copy out a video frame if a
- * video frame is found, but this may be faster if you know it's a video frame.
- * @param frame  AVFrame
+ * Free the swscaler context swsContext.
+ * If swsContext is NULL, then does nothing.
  */
-ff_copyout_frame_video_sync(frame: number): Frame;
+sws_freeContext_sync(swsContext: number): void;
 /**
- * Get the size of a packed video frame in its native format.
- * @param frame  AVFrame
+ * Scale source data from src and write the output to dst.
+ *
+ * This is merely a convenience wrapper around
+ * - sws_frame_start()
+ * - sws_send_slice(0, src->height)
+ * - sws_receive_slice(0, dst->height)
+ * - sws_frame_end()
+ *
+ * @param c   The scaling context
+ * @param dst The destination frame. See documentation for sws_frame_start() for
+ *            more details.
+ * @param src The source frame.
+ *
+ * @return 0 on success, a negative AVERROR code on failure
  */
-ff_frame_video_packed_size_sync(frame: number): Frame;
-/**
- * Copy out a video frame, as a single packed Uint8Array.
- * @param frame  AVFrame
- */
-ff_copyout_frame_video_packed_sync(frame: number): Frame;
-/**
- * Copy out a video frame as an ImageData. The video frame *must* be RGBA for
- * this to work as expected (though some ImageData will be returned for any
- * frame).
- * @param frame  AVFrame
- */
-ff_copyout_frame_video_imagedata_sync(
-    frame: number
-): ImageData;
-/**
- * Copy in a frame.
- * @param framePtr  AVFrame
- * @param frame  Frame to copy in, as either a Frame or an AVFrame pointer
- */
-ff_copyin_frame_sync(framePtr: number, frame: Frame | number): void;
-/**
- * Copy out a packet.
- * @param pkt  AVPacket
- */
-ff_copyout_packet_sync(pkt: number): Packet;
-/**
- * Copy "out" a packet by just copying its data into a new AVPacket.
- * @param pkt  AVPacket
- */
-ff_copyout_packet_ptr_sync(pkt: number): number;
-/**
- * Copy in a packet.
- * @param pktPtr  AVPacket
- * @param packet  Packet to copy in, as either a Packet or an AVPacket pointer
- */
-ff_copyin_packet_sync(pktPtr: number, packet: Packet | number): void;
-/**
- * Copy out codec parameters.
- * @param codecpar  AVCodecParameters
- */
-ff_copyout_codecpar_sync(codecpar: number): CodecParameters;
-/**
- * Copy in codec parameters.
- * @param codecparPtr  AVCodecParameters
- * @param codecpar  Codec parameters to copy in.
- */
-ff_copyin_codecpar_sync(codecparPtr: number, codecpar: CodecParameters): void;
-/**
- * Allocate and copy in a 32-bit int list.
- * @param list  List of numbers to copy in
- */
-ff_malloc_int32_list_sync(list: number[]): number;
-/**
- * Allocate and copy in a 64-bit int list.
- * @param list  List of numbers to copy in
- */
-ff_malloc_int64_list_sync(list: number[]): number;
-/**
- * Allocate and copy in a string array. The resulting array will be
- * NULL-terminated.
- * @param arr  Array of strings to copy in.
- */
-ff_malloc_string_array_sync(arr: string[]): number;
-/**
- * Free a string array allocated by ff_malloc_string_array.
- * @param ptr  Pointer to the array to free.
- */
-ff_free_string_array_sync(ptr: number): void;
+sws_scale_frame_sync(c: number,dst: number,src: number): number;
+ffmpeg_main_sync(a0: number,a1: number): number | Promise<number>;
+ffprobe_main_sync(a0: number,a1: number): number | Promise<number>;
 /**
  * Frontend to the ffmpeg CLI (if it's compiled in). Pass arguments as strings,
  * or you may intermix arrays of strings for multiple arguments.

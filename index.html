@@ -16,7 +16,7 @@
         }
     </style>
 
-    <script src="js/libav-6.5.7.1-webcodecs.js"></script>
+    <script src="js/libav-6.8.8.0-webcodecs.js"></script>
     <script src="js/libavjs-webcodecs-bridge.js"></script>
     <script>
         const Lock = function() {
@@ -48,13 +48,15 @@
             const translations = {
                 'zh-CN': {
                     compatabilityWarning: '此浏览器过旧或缺少必须功能',
-                    workerDegradation: '当前环境不支持Web Worker多线程模式，性能可能受影响',
+                    workerDegradation: '当前环境不支持Web Worker，性能可能受影响',
                     encodeDoneMessage: '编码已完成',
+                    noEncoder: '无可用编码器',
                 },
                 'en': {
                     compatabilityWarning: 'This browser is too old or lacking features.',
                     workerDegradation: 'Web Worker is not supported, expect poor performance.',
                     encodeDoneMessage: 'Encoding completed',
+                    noEncoder: 'No encoder available',
 
                     analyzeBtn: 'Auto Configure',
                     videoTrimInstruction: 'Set the start point and end point in the video.',
@@ -1045,6 +1047,7 @@
 
                 document.getElementById('status').textContent = 'Loading';
                 if (!(await VideoEncoder.isConfigSupported(outputConfig)).supported) {
+                    document.getElementById('status').textContent = translation.noEncoder;
                     return;
                 }
 
